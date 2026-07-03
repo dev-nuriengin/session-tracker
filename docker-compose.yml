@@ -1,0 +1,15 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: session_tracker_db
+    environment:
+      POSTGRES_USER: session
+      POSTGRES_PASSWORD: session
+      POSTGRES_DB: session_tracker
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
