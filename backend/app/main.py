@@ -128,10 +128,11 @@ def agent(body: ChatIn):
 
 class GraphIn(BaseModel):
     project: str
+    thread_id: str | None = None  # names the session for checkpointing/resume
 
 
 @app.post("/graph")
 def graph(body: GraphIn):
     """Run the LangGraph pipeline for a project and return the final state
     (context, summary, plan, approved). Framework version of /agent."""
-    return run_graph(body.project)
+    return run_graph(body.project, body.thread_id)

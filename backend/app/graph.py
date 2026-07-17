@@ -18,6 +18,7 @@ from typing import TypedDict
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field
 
 from .tools import list_projects, read_tracker
@@ -123,13 +124,19 @@ def build_graph():
     g.add_edge("summarize", "plan")
     g.add_edge("plan", "approve")
     g.add_edge("approve", END)
-    return g.compile()
+    # checkpointer saves state after every node, keyed by thread_id → lets a
+    # session be resumed. MemorySaver is in-process only (wiped on restart);
+    # swap for PostgresSaver/SqliteSaver for true persistence.
+    return g.compile(checkpointer=checkpointer)
 
 
 # Compile once at import; reuse across requests.
+checkpointer = MemorySaver()
 session_graph = build_graph()
 
 
-def run_graph(project: str) -> dict:
-    """Run the full pipeline for a project and return the final state."""
-    return session_graph.invoke({"project": project})
+def run_graph(project: str, thread_id: str | None = None) -> dict:
+    """Run the pipeline for a project. thread_id names the session so its state
+    is checkpointed and can be resumed; defaults to the project name."""
+    config = {"configurable": {"thread_id": thread_id or project}}
+    return session_graph.invoke({"project": project}, config)
