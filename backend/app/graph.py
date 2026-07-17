@@ -26,8 +26,17 @@ from .tools import list_projects, read_tracker
 
 load_dotenv()  # ANTHROPIC_API_KEY — must be set before the model is created
 
+# Built LAZILY — the brain is OPTIONAL, so importing/using the tracker core needs
+# no API key. The key is read only when a brain node first runs.
 # The one provider line. Swap the string to change providers.
-llm = init_chat_model("anthropic:claude-opus-4-8")
+_llm = None
+
+
+def _get_llm():
+    global _llm
+    if _llm is None:
+        _llm = init_chat_model("anthropic:claude-opus-4-8")
+    return _llm
 
 
 # --- Structured outputs (Pydantic) ---
@@ -87,7 +96,7 @@ def summarize(state: SessionState) -> dict:
         f"Project '{state['project']}' status:\n{guardrails.redact(state['context'])}\n\n"
         "Summarize where this project stands."
     )
-    summary = llm.with_structured_output(Summary).invoke(prompt)
+    summary = _get_llm().with_structured_output(Summary).invoke(prompt)
     return {"summary": summary}
 
 
@@ -99,7 +108,7 @@ def plan(state: SessionState) -> dict:
         f"Summary: {state['summary'].headline}\n\n"
         "Propose the 3 most important next steps, most important first."
     )
-    plan = llm.with_structured_output(Plan).invoke(prompt)
+    plan = _get_llm().with_structured_output(Plan).invoke(prompt)
     return {"plan": plan}
 
 

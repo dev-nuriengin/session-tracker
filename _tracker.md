@@ -29,17 +29,28 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 25 / 28 done. Idea locked (above). **Phases 4–9 complete.** Only Phase 10 (ship)
-left, plus deferred refinements (hybrid+rerank, cloud store, folder grouping in UI).
+**Status:** 26 / 28 — **ALL CORE PHASES DONE (0–10).** The 2 open items are
+explicitly-deferred future refinements: Phase 7 optional cloud store, Phase 8 hybrid+rerank.
 
-**NEXT:** Phase 10 — **ship**: a `docker compose` that runs the whole thing locally
-(db + backend); document running the MCP server + CLI + web; note that cloud/UI + auth are
-opt-in only (not default).
+**Build complete.** The whole product exists: local Postgres core → three doors (MCP · CLI
+· web), summary-first, private, provider-swappable, with RAG + eval + opt-in observability,
+dockerized for local run.
 
-**Eval/observability (Phase 9) in place:** `observability.py` (Langfuse, opt-in/off by
-default), `eval.py` + `sess eval` (LLM-as-judge: faithfulness + conciseness),
-`guardrails.py` (`redact()` at the LLM boundary — wired into the graph's summarize/plan
-prompts). Deps: `langfuse`.
+**Cost/keys:** the core (MCP/CLI/web/DB/local search) makes **zero LLM calls → runs with no
+API key or credits** (LLM clients are lazy). The **brain** (`/graph`, `/agent`, `/chat`,
+`sess eval`) is **optional** — reads the key only when actually used (value: human at CLI/web
+without an agent, or background jobs). Security follow-up done: eval redacts at its LLM
+boundary; `redact()` is best-effort defense-in-depth.
+
+**NEXT (optional / future):** hybrid search + rerank (Phase 8) · folder grouping in the web
+UI · optional cloud store + hosted UI (opt-in) · remove the superseded `cli/` skeleton ·
+start dogfooding (retire `_tracker.md` into the product itself).
+
+**Ship (Phase 10) in place:** `backend/Dockerfile` (uv) + `docker compose up --build`
+(db healthcheck → backend, `ANTHROPIC_API_KEY` from `.env`) + `.dockerignore` + README run
+docs. Cloud/UI + auth are opt-in only.
+
+**Git:** all phases (0–10) committed & pushed to `dev-nuriengin/session-tracker`.
 
 **MCP (Phase 5) in place:** `backend/app/mcp_server.py` — FastMCP `session-tracker`
 server exposing `list_projects` · `get_history` · `whats_next` · `save_progress` ·
@@ -106,5 +117,5 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] LLM-as-judge eval on summaries — `eval.py` (faithfulness + conciseness), `sess eval [project]`
 - [x] Guardrails: PII/secret redaction at the LLM boundary (`guardrails.redact`), not on local storage
 
-## Phase 10 — Ship
-- [ ] Dockerize for local run; optional cloud/UI + auth only if the user enables it
+## Phase 10 — Ship ✅
+- [x] Dockerize for local run: `backend/Dockerfile` (uv) + `docker compose up --build` (db healthcheck → backend); `.dockerignore`; README run docs. Cloud/UI + auth remain opt-in only.

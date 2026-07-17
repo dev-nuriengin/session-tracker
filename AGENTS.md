@@ -35,6 +35,9 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
 - **Data is LOCAL & PRIVATE** — never committed, pushed, or cloud-synced (cloud = future,
   opt-in). App *code* is public on GitHub; app *data* stays on the machine.
 - The **LangGraph brain** (`backend/app/graph.py`) is an *optional helper*, not the product.
+  It (and `/agent`, `/chat`, `sess eval`) is the only part that calls Claude — built **lazily**,
+  so the core (MCP/CLI/web/DB/search) runs with **no API key or credits**. The brain is for
+  when a human uses CLI/web **without** an agent (on-demand summaries) or for background jobs.
 
 ## How to work in THIS repo (our build workflow — not product features)
 

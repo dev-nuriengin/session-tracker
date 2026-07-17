@@ -8,10 +8,17 @@ interview. Local; uses the same Claude model the app already uses.
 from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 
-from . import repository
+from . import guardrails, repository
 from .graph import run_graph
 
-_judge = init_chat_model("anthropic:claude-opus-4-8")
+_judge = None  # built lazily — needs a key only when eval actually runs
+
+
+def _get_judge():
+    global _judge
+    if _judge is None:
+        _judge = init_chat_model("anthropic:claude-opus-4-8")
+    return _judge
 
 
 class Judgement(BaseModel):
@@ -29,9 +36,10 @@ def evaluate(projects: list[str] | None = None) -> list[dict]:
         summary = state.get("summary")
         if summary is None:  # unknown project / routed to list_known
             continue
-        verdict = _judge.with_structured_output(Judgement).invoke(
-            f"Source status:\n{state['context']}\n\n"
-            f"Summary produced:\n{summary.headline}\n\n"
+        # Redact at this LLM boundary too (same rule as the graph prompts).
+        verdict = _get_judge().with_structured_output(Judgement).invoke(
+            f"Source status:\n{guardrails.redact(state['context'])}\n\n"
+            f"Summary produced:\n{guardrails.redact(summary.headline)}\n\n"
             "Score the summary on faithfulness and conciseness."
         )
         results.append({

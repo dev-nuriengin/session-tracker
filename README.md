@@ -95,6 +95,17 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 - The app *code* (this repo) is public on GitHub; the app *data* stays private.
 - Auth / going public is **deployment config, not a product feature.**
 
+## Cost & API keys
+
+**The tracker core needs no API key and no credits.** MCP, CLI, web, the DB, and local
+search make **zero LLM calls** — the LLM (Claude Code / any agent) brings its own
+intelligence and talks to the tracker through MCP. The app **boots and serves with no key**.
+
+The **optional brain** (`/graph`, `/agent`, `/chat`, `sess eval`) *does* call Claude, so it
+reads `ANTHROPIC_API_KEY` — but **only the moment you actually use it** (the client is built
+lazily). The brain earns its keep when you're at the **CLI/web without an agent** (on-demand
+summary / suggested next steps) or for **background jobs** — otherwise agents do the thinking.
+
 ## Stack
 - **Backend:** FastAPI (Python, uv)
 - **Core store:** Postgres + pgvector
@@ -105,10 +116,29 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 - **Model:** `claude-opus-4-8` (swappable to OpenAI/xAI via one line)
 - **Observability (later):** Langfuse
 
-## Local dev
-1. Start the database: `docker compose up -d`
-2. Backend: `cd backend && uv run uvicorn app.main:app --reload` → http://localhost:8000/health
-3. Frontend: `cd frontend && npm run dev` → http://localhost:3000
+## Run
+
+**Whole stack locally (db + backend):**
+```bash
+docker compose up --build        # Postgres+pgvector + API on :8000
+```
+`ANTHROPIC_API_KEY` is read from `./.env` (local & private — never baked into the image).
+The API creates the vector extension, tables, and seed on first startup.
+
+**Dev loop (hot reload):**
+```bash
+docker compose up -d db                                   # just the database
+cd backend && uv run uvicorn app.main:app --reload        # API → :8000
+cd frontend && npm run dev                                 # web view → :3000
+```
+
+**The three doors (all on the same local core):**
+- **MCP** (agents): `.mcp.json` wires Claude Code to it, or run `uv run python -m app.mcp_server`
+- **CLI** (you): `uv run sess list` · `sess show <p>` · `sess add-project <slug>` · `sess ask "<q>"` · `sess eval`
+- **Web**: http://localhost:3000
+
+**Optional (off by default, opt-in):** Langfuse tracing (`LANGFUSE_*` env vars) · a cloud
+store/UI + auth — only if you enable them. By default everything stays local & private.
 
 ## For AI agents / contributors
 

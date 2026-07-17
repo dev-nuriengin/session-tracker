@@ -31,7 +31,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = anthropic.Anthropic()  # picks up ANTHROPIC_API_KEY from the environment
+# The Claude client is built LAZILY — only when the optional brain endpoints
+# (/chat, /agent) are actually called. The tracker core (DB reads/writes) never
+# needs it, so the app boots and serves projects with NO API key.
+_client: anthropic.Anthropic | None = None
+
+
+def _anthropic() -> anthropic.Anthropic:
+    global _client
+    if _client is None:
+        _client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY on first use
+    return _client
 
 
 @app.get("/health")
@@ -53,7 +63,7 @@ def chat(body: ChatIn):
     """Stream Claude's reply back token-by-token as Server-Sent Events."""
 
     def event_stream():
-        with client.messages.stream(
+        with _anthropic().messages.stream(
             model="claude-opus-4-8",
             max_tokens=1024,
             messages=[{"role": "user", "content": body.message}],
@@ -108,7 +118,7 @@ def agent(body: ChatIn):
     tool_calls = []  # so we can SEE which tools fired
 
     while True:
-        resp = client.messages.create(
+        resp = _anthropic().messages.create(
             # QUESTIONs-Armanc: Why static claude-opus-4-8? Should we make this configurable?
             model="claude-opus-4-8",
             max_tokens=1024, # QUESTIONs-Armanc: Why static max_tokens? Should we make this configurable?

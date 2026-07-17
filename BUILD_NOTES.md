@@ -47,6 +47,16 @@ via **MCP** for continuity. It is **NOT an agent** — it doesn't do work or gat
 - **`_tracker.md` is a temporary scaffold** — the product will track itself (dogfood),
   then it's retired.
 
+## Brain is optional; core is keyless (decided)
+
+- The tracker **core** (MCP/CLI/web/DB/local search) makes **zero LLM calls** → needs **no
+  API key or credits**. The LLM (Claude Code / any agent) brings its own intelligence via MCP.
+- The **brain** (`/graph`, `/agent`, `/chat`, `sess eval`) is kept but **optional** — LLM
+  clients are built **lazily** (`_anthropic()` / `_get_llm()` / `_get_judge()`), so the app
+  boots without a key; the key is read only when the brain/eval is actually invoked.
+- **Why keep the brain:** value only when a human uses CLI/web **without** an agent
+  (on-demand summary / next steps) or for background jobs. Through an agent it's redundant.
+
 ## Dropped / corrected (don't reintroduce)
 
 - ❌ "plan-before-code approve gate" as a PRODUCT feature — the tracker does **not** gate

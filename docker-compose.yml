@@ -10,6 +10,26 @@ services:
       - "5433:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U session -d session_tracker"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # Backend API. Only starts once the db is healthy (it creates the vector
+  # extension + tables + seed on startup). ANTHROPIC_API_KEY comes from ./.env
+  # (local & private — never baked into the image).
+  backend:
+    build: ./backend
+    container_name: session_tracker_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://session:session@db:5432/session_tracker
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ports:
+      - "8000:8000"
 
 volumes:
   db_data:
