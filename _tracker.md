@@ -9,11 +9,13 @@
 
 ## ▸ Resume here (next session)
 
-**Status:** 7 / 24 done. Phase 1 complete; Phase 2 started — state graph modelled & running.
+**Status:** 8 / 24 done. Phase 1 complete; Phase 2 two-thirds done (graph + structured outputs).
 
 **Decisions (Phase 2):** LLM layer = **LangChain** (`langchain-anthropic`), not raw SDK — so provider swap is one line (`init_chat_model("anthropic:claude-opus-4-8")` → openai/xai). New **`/graph`** endpoint; `/agent` kept as reference.
 
-**NEXT:** Phase 2 continues — (1) structured outputs: make `summarize`/`plan` return **Pydantic** objects via LangChain `.with_structured_output(...)` instead of free text; (2) wire `list_projects` / `read_tracker` in as graph nodes/edges (currently `load` reuses the tracker stub directly).
+**NEXT:** Phase 2 last item — wire `list_projects` / `read_tracker` in as **graph nodes/edges** (currently `load` reuses the tracker stub directly; make the graph call the tools instead of inlining `TRACKERS`). That finishes Phase 2 → on to Phase 3 (checkpointing + real human-in-the-loop approve gate).
+
+**Structured outputs:** `graph.py` now has Pydantic `Summary(stage, headline)` + `Plan(steps=[NextStep(step, why)])`; nodes use `llm.with_structured_output(...)`. `SessionState.summary/plan` are typed objects, not strings.
 
 **Where the Phase 2 code is:**
 - `backend/app/graph.py` — `StateGraph` with nodes load → summarize → plan → approve; `SessionState` TypedDict; `run_graph(project)`. Provider set in ONE line (`init_chat_model`).
@@ -54,7 +56,7 @@
 
 ## Phase 2 — Port to LangGraph
 - [x] Model the state graph: load → summarize → plan → approve
-- [ ] Structured outputs (Pydantic) for summary + plan
+- [x] Structured outputs (Pydantic) for summary + plan
 - [ ] Wire tools as graph nodes & edges
 
 ## Phase 3 — State, memory, human-in-the-loop

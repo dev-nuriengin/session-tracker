@@ -10,6 +10,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+# QUESTIONs-Armanc: Why hard-coded project list? Should not come from a db?
 # Stub data — later this comes from the DB / each project's .ai/_tracker.md
 PROJECTS = ["korpus", "visionbank", "hinbunakurdi", "growthhq", "integral", "resho-hub"]
 

@@ -1,3 +1,4 @@
+# QUESTIONs-Armanc: Why inline data? Shoul not come from a db?
 """Shared stub data — later this comes from each project's .ai/_tracker.md.
 
 Lives in its own module so both the Phase 1 loop (main.py) and the Phase 2
