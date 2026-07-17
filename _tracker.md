@@ -29,18 +29,19 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 11 / 28 done. Idea locked (above). Phase 4 (Postgres core) in progress.
+**Status:** 13 / 28 done. Idea locked (above). **Phase 4 (Postgres core) complete.**
 
-**NEXT:** finish Phase 4 — extend the schema to the final shape: add **folders**
-(project → folders → items) and a **decisions/memory** table (decisions, repo links,
-notes). Then wire the real DB into tools/graph/endpoints (retire the stub `data.py`).
-After that → Phase 5: the **MCP server** (the heart) with continuity (pull-history-first
-+ save-progress-behind-the-scenes).
+**NEXT:** Phase 5 — the **MCP server** (the heart). Build a FastMCP server over the
+repository so any agent gets: `list_projects` · `get_history` (pull-history-first) ·
+`save_progress` · `whats_next`. Then wire Claude Code to discover it (local config).
+The continuity payload already exists as `repository.get_history(slug)`.
 
-**Built this phase:** `db.py` (sync SQLAlchemy engine/session + `DATABASE_URL`),
-`models.py` (projects · tracking_items · sessions · session_logs — **schema v1**, seeded
-from the old stub), `repository.py` (`list_projects` / `get_status` / `add_session_log` /
-`seed`). Verified against local Postgres.
+**Core (Phase 4) in place:** `db.py` (sync SQLAlchemy + `DATABASE_URL`), `models.py`
+(Project · Folder[nestable] · Item · Session · SessionLog · Memory), `repository.py`
+(projects/folders/items/memory/session-logs + `get_history` continuity payload + seed).
+`tools.py` + `/agent` + `/graph` now read the **real DB**. New endpoints: `GET /projects`,
+`GET /projects/{slug}` (continuity payload). DB tables auto-created + seeded on startup
+(FastAPI lifespan). `data.py` is now seed-only.
 
 **Run:** `docker compose up -d` · `cd backend && uv run uvicorn app.main:app --reload`.
 **Env:** `.env` (gitignored) → `ANTHROPIC_API_KEY`, `DATABASE_URL`. Model `claude-opus-4-8`.
@@ -69,10 +70,10 @@ from the old stub), `repository.py` (`list_projects` / `get_status` / `add_sessi
 > Dropped (not tracker features): "approve-before-code gate" — the tracker does NOT gate
 > coding; "auto-save at context budget" — replaced by real progress capture into the DB.
 
-## Phase 4 — Core data model (Postgres) ← THE STORE, in progress
+## Phase 4 — Core data model (Postgres) ← THE STORE ✅
 - [x] DB engine/session (db.py) + repository layer + schema v1 (projects · items · sessions · session_logs), seeded
-- [ ] Final schema shape: add **folders** (project → folders → items) + **decisions/memory** table (decisions · repo links · notes)
-- [ ] Wire real DB into tools/graph/endpoints; retire the stub `data.py`
+- [x] Final schema shape: **folders** (nestable; project → folders → items) + **memory** table (decisions · links · notes · transcripts)
+- [x] Wire real DB into tools/graph/endpoints; stub `data.py` demoted to seed-only
 
 ## Phase 5 — MCP server ← THE HEART (agents' door)
 - [ ] FastMCP server over the core: list_projects · get_item/history · save_progress · whats_next

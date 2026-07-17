@@ -1,10 +1,13 @@
 """Phase 4 — the core schema.
 
-    projects → tracking_items (steps) → ...
-    projects → sessions → session_logs
+    projects → folders (nestable) → items          (the work map)
+    projects → sessions → session_logs             (what happened, per session)
+    projects → memory                              (durable facts: decisions, links, notes)
 
 This is Session Tracker's single source of truth. All doors (MCP, CLI, web) read
-and write these tables; nothing lives in local files.
+and write these tables; nothing lives in local files. Terminology is
+domain-agnostic — an "item" is a ticket (IT), a bill (accounting), a deliverable
+(design); the schema stays generic.
 """
 
 from datetime import datetime, timezone
@@ -20,7 +23,7 @@ def _now() -> datetime:
 
 
 class Project(Base):
-    """One thing the user is working on (a client project or a personal one)."""
+    """A high-level thing the user works on (a client project or a personal one)."""
 
     __tablename__ = "projects"
 
@@ -31,27 +34,60 @@ class Project(Base):
     client: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    items: Mapped[list["TrackingItem"]] = relationship(
+    folders: Mapped[list["Folder"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    items: Mapped[list["Item"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
     sessions: Mapped[list["Session"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    memory: Mapped[list["Memory"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
 
-class TrackingItem(Base):
-    """A step/task within a project (the tracker checkboxes, in the DB)."""
+class Folder(Base):
+    """A grouping inside a project. Nestable via parent_id (folders → sub-folders)."""
+
+    __tablename__ = "folders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("folders.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    project: Mapped["Project"] = relationship(back_populates="folders")
+    children: Mapped[list["Folder"]] = relationship()
+    items: Mapped[list["Item"]] = relationship(back_populates="folder")
+
+
+class Item(Base):
+    """A unit of work in a project — generic: a ticket, a bill, a deliverable, …
+
+    Optionally lives in a folder; otherwise sits directly under the project.
+    (Table name kept as `tracking_items` — the generic term stays 'item'.)
+    """
 
     __tablename__ = "tracking_items"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("folders.id"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="todo")  # todo | doing | done
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     project: Mapped["Project"] = relationship(back_populates="items")
+    folder: Mapped["Folder | None"] = relationship(back_populates="items")
 
 
 class Session(Base):
@@ -86,3 +122,23 @@ class SessionLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     session: Mapped["Session"] = relationship(back_populates="logs")
+
+
+class Memory(Base):
+    """Durable, concrete memory for a project — decisions, repo links, notes,
+    meeting/decision transcripts. This is what gives agents continuity across
+    sessions. Optionally scoped to a folder or item."""
+
+    __tablename__ = "memory"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    folder_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id"), nullable=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("tracking_items.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), default="note")  # decision | link | note | transcript
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    content: Mapped[str] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # e.g. GitLab/GitHub link
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    project: Mapped["Project"] = relationship(back_populates="memory")

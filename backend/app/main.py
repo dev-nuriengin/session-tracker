@@ -3,15 +3,24 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from contextlib import asynccontextmanager
+
 from pydantic import BaseModel
 import anthropic
 
-from .data import PROJECTS, TRACKERS
+from . import repository
 from .graph import run_graph
 
 load_dotenv()  # reads ../.env → ANTHROPIC_API_KEY
 
-app = FastAPI(title="Session Tracker API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    repository.setup()  # create tables + seed once, on startup
+    yield
+
+
+app = FastAPI(title="Session Tracker API", lifespan=lifespan)
 client = anthropic.Anthropic()  # picks up ANTHROPIC_API_KEY from the environment
 
 
@@ -72,14 +81,12 @@ TOOLS = [
 
 
 def run_tool(name: str, tool_input: dict) -> str:
-    """Execute a tool by name and return a string result."""
+    """Execute a tool by name and return a string result (reads the real DB)."""
     if name == "list_projects":
-        return ", ".join(PROJECTS)
+        return ", ".join(repository.list_projects())
     if name == "read_tracker":
-        project = tool_input.get("project", "").strip().lower()
-        if project in TRACKERS:
-            return TRACKERS[project]
-        return f"No tracker found for '{project}'. Known projects: {', '.join(PROJECTS)}."
+        status = repository.get_status(tool_input.get("project", ""))
+        return status or f"No project found. Known: {', '.join(repository.list_projects())}."
     return f"Unknown tool: {name}"
 
 
@@ -136,3 +143,21 @@ def graph(body: GraphIn):
     """Run the LangGraph pipeline for a project and return the final state
     (context, summary, plan, approved). Framework version of /agent."""
     return run_graph(body.project, body.thread_id)
+
+
+# ---- Core read endpoints (projects live in the DB) ----
+
+
+@app.get("/projects")
+def projects():
+    """List all projects (from the core DB)."""
+    return {"projects": repository.list_projects()}
+
+
+@app.get("/projects/{slug}")
+def project_detail(slug: str):
+    """A project's continuity payload: open items, memory, recent session logs."""
+    history = repository.get_history(slug)
+    if not history:
+        return {"error": f"unknown project '{slug}'"}
+    return history
