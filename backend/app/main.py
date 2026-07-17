@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import anthropic
 
@@ -21,6 +22,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Session Tracker API", lifespan=lifespan)
+
+# Local web door (Next.js dev server) needs CORS to read the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 client = anthropic.Anthropic()  # picks up ANTHROPIC_API_KEY from the environment
 
 

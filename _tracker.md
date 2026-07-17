@@ -29,16 +29,18 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 19 / 28 done. Idea locked (above). **Phases 4 (core) + 5 (MCP) + 6 (CLI) complete.**
+**Status:** 20 / 28 done. Idea locked (above). **Phases 4–7 complete (core · MCP · CLI · web).**
+The whole product loop exists: local Postgres core → three doors (MCP · CLI · web), all
+summary-first. Remaining are the showcase phases: RAG (8) · eval/observability (9) · ship (10).
 
-**NEXT:** Phase 7 — the **web** (local read view): Next.js status board over the core
-(projects · folders · items · session history), reading the FastAPI `GET /projects` +
-`GET /projects/{slug}` endpoints. Frontend skeleton exists in `frontend/`.
+**NEXT:** Phase 8 — **RAG over session logs**: add a pgvector embedding column to
+`session_logs` (+ memory), embed + chunk on write, and a retrieval tool/endpoint to "ask
+across all projects." Postgres already has pgvector.
 
-**CLI (Phase 6) in place:** `backend/app/cli.py` — `sess` command on the shared
-`repository` (`uv run sess list|status|show|add-project|add-folder|add-item|remember|log`).
-Console script wired via `[project.scripts]` + hatchling build. Old `cli/` skeleton
-(hardcoded list) is superseded — remove later.
+**Web (Phase 7) in place:** `frontend/app/page.tsx` — status board (projects sidebar →
+compact overview → "Show full" drill-down) reading `GET /projects`, `/projects/{slug}`,
+`/projects/{slug}/history`. Backend `CORSMiddleware` for localhost:3000. Typechecks clean.
+Run: backend on :8000 + `cd frontend && npm run dev` → :3000. (Optional cloud store deferred.)
 
 **MCP (Phase 5) in place:** `backend/app/mcp_server.py` — FastMCP `session-tracker`
 server exposing `list_projects` · `get_history` · `whats_next` · `save_progress` ·
@@ -91,8 +93,8 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] Query status/history (list · status · show) + save progress (log · remember)
 - [x] `sess` console script on the shared repository (`uv run sess …`); old `cli/` skeleton superseded (remove later)
 
-## Phase 7 — Web — a local read view
-- [ ] Next.js status board: projects · folders · items · session history
+## Phase 7 — Web — a local read view ✅ (core)
+- [x] Next.js status board: projects sidebar → compact overview → "Show full" (items · memory · logs). Reads `GET /projects` + `/projects/{slug}` (+ `/history`); backend CORS added. Summary-first.
 - [ ] (later, opt-in) optional cloud store so a hosted UI can retrieve data
 
 ## Phase 8 — RAG over session logs
