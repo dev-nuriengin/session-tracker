@@ -6,23 +6,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import anthropic
 
+from .data import PROJECTS, TRACKERS
+from .graph import run_graph
+
 load_dotenv()  # reads ../.env → ANTHROPIC_API_KEY
 
 app = FastAPI(title="Session Tracker API")
 client = anthropic.Anthropic()  # picks up ANTHROPIC_API_KEY from the environment
-
-# Stub data — later this comes from each project's .ai/_tracker.md
-PROJECTS = ["korpus", "visionbank", "hinbunakurdi", "growthhq", "integral", "resho-hub"]
-
-# Stub per-project status — real file/RAG reads land in Phase 5
-TRACKERS = {
-    "korpus": "Phase 2/5. NEXT: wire pgvector retrieval into the FastAPI search endpoint.",
-    "visionbank": "Kickoff. NEXT: scaffold the repo + pick the stack.",
-    "hinbunakurdi": "Live SaaS. NEXT: add spaced-repetition scheduling to the lesson flow.",
-    "growthhq": "Ongoing. NEXT: finish SumUp interview prep in the Companies tab.",
-    "integral": "Work project. NEXT: (private).",
-    "resho-hub": "Ship-fast. NEXT: deploy the MVP and gather first feedback.",
-}
 
 
 @app.get("/health")
@@ -102,8 +92,9 @@ def agent(body: ChatIn):
 
     while True:
         resp = client.messages.create(
+            # QUESTIONs-Armanc: Why static claude-opus-4-8? Should we make this configurable?
             model="claude-opus-4-8",
-            max_tokens=1024,
+            max_tokens=1024, # QUESTIONs-Armanc: Why static max_tokens? Should we make this configurable?
             tools=TOOLS,
             messages=messages,
         )
@@ -130,3 +121,17 @@ def agent(body: ChatIn):
 
     final_text = "".join(b.text for b in resp.content if b.type == "text")
     return {"reply": final_text, "tool_calls": tool_calls}
+
+
+# ---- Phase 2: the LangGraph session pipeline (load → summarize → plan → approve) ----
+
+
+class GraphIn(BaseModel):
+    project: str
+
+
+@app.post("/graph")
+def graph(body: GraphIn):
+    """Run the LangGraph pipeline for a project and return the final state
+    (context, summary, plan, approved). Framework version of /agent."""
+    return run_graph(body.project)

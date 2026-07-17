@@ -9,9 +9,18 @@
 
 ## ▸ Resume here (next session)
 
-**Status:** 6 / 24 done. Phase 0 complete; Phase 1 complete (streaming call + agent loop + first two tools).
+**Status:** 7 / 24 done. Phase 1 complete; Phase 2 started — state graph modelled & running.
 
-**NEXT:** start Phase 2 — port the hand-built loop to LangGraph. First step: model the state graph (load → summarize → plan → approve) as nodes + edges. Keep the two working tools; wire them in as graph nodes next.
+**Decisions (Phase 2):** LLM layer = **LangChain** (`langchain-anthropic`), not raw SDK — so provider swap is one line (`init_chat_model("anthropic:claude-opus-4-8")` → openai/xai). New **`/graph`** endpoint; `/agent` kept as reference.
+
+**NEXT:** Phase 2 continues — (1) structured outputs: make `summarize`/`plan` return **Pydantic** objects via LangChain `.with_structured_output(...)` instead of free text; (2) wire `list_projects` / `read_tracker` in as graph nodes/edges (currently `load` reuses the tracker stub directly).
+
+**Where the Phase 2 code is:**
+- `backend/app/graph.py` — `StateGraph` with nodes load → summarize → plan → approve; `SessionState` TypedDict; `run_graph(project)`. Provider set in ONE line (`init_chat_model`).
+- `backend/app/data.py` — shared `PROJECTS` + `TRACKERS` (moved out of main.py to avoid circular import).
+- `backend/app/main.py` — `/graph` endpoint (thin wrapper over `run_graph`).
+- Verified: `run_graph("korpus")` returns context + summary + plan + approved.
+- `approve` node auto-approves (real human-in-the-loop pause = Phase 3).
 
 **Where the code is:** `backend/app/main.py`
 - `/health`, `/` — basic
@@ -29,7 +38,7 @@
 
 **Learn-hub (tag `session-tracker`, not yet posted):** streaming LLM calls / SSE; the agent loop (tool-calling while-loop). Both hub-worthy.
 
-**Git:** last commit = Phase 0 scaffold. All of Phase 1 (chat + agent endpoints + both tools) is **uncommitted** — commit when ready (personal account `dev-nuriengin`, needs explicit "yes").
+**Git:** Phase 0 + Phase 1 committed & pushed (`dev-nuriengin`). Phase 2 code (graph.py, data.py, /graph, deps) is **uncommitted** — commit when ready (needs explicit "yes").
 
 ---
 
@@ -44,7 +53,7 @@
 - [x] First tools: list_projects · read_tracker
 
 ## Phase 2 — Port to LangGraph
-- [ ] Model the state graph: load → summarize → plan → approve
+- [x] Model the state graph: load → summarize → plan → approve
 - [ ] Structured outputs (Pydantic) for summary + plan
 - [ ] Wire tools as graph nodes & edges
 
