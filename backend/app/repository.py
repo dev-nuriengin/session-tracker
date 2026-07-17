@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from . import models
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
 from .db import SessionLocal, init_db
+from .embeddings import embed
 
 
 # ---- projects ----
@@ -169,9 +170,34 @@ def add_session_log(slug: str, thread_id: str, content: str, kind: str = "note")
             session = models.Session(project_id=project.id, thread_id=thread_id)
             db.add(session)
             db.flush()
-        db.add(models.SessionLog(session_id=session.id, content=content, kind=kind))
+        db.add(models.SessionLog(
+            session_id=session.id, content=content, kind=kind, embedding=embed(content)
+        ))
         db.commit()
         return True
+
+
+def search_logs(query: str, limit: int = 5) -> list[dict]:
+    """Semantic search across ALL projects' session logs (local embeddings + pgvector).
+    Returns the closest log entries with their project + a similarity score."""
+    qv = embed(query)
+    with SessionLocal() as db:
+        rows = db.execute(
+            select(
+                models.SessionLog,
+                models.Project.slug,
+                models.SessionLog.embedding.cosine_distance(qv).label("dist"),
+            )
+            .join(models.Session, models.SessionLog.session_id == models.Session.id)
+            .join(models.Project, models.Session.project_id == models.Project.id)
+            .where(models.SessionLog.embedding.is_not(None))
+            .order_by("dist")
+            .limit(limit)
+        ).all()
+        return [
+            {"project": slug, "kind": log.kind, "content": log.content, "score": round(1 - dist, 3)}
+            for log, slug, dist in rows
+        ]
 
 
 def get_history(slug: str, limit: int = 10) -> dict:

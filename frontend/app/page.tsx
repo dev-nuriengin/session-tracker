@@ -137,8 +137,13 @@ export default function Home() {
                           {m.kind}
                         </span>{" "}
                         {m.content}
-                        {m.url && (
-                          <a href={m.url} className="ml-1 text-blue-600 underline">
+                        {m.url && /^https?:\/\//i.test(m.url) && (
+                          <a
+                            href={m.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-1 text-blue-600 underline"
+                          >
                             link
                           </a>
                         )}

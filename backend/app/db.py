@@ -8,7 +8,7 @@ async/await plumbing.
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 load_dotenv()
@@ -33,4 +33,6 @@ def init_db() -> None:
     """Create tables if they don't exist (dev convenience; real migrations later)."""
     from . import models  # noqa: F401 — import registers the models on Base.metadata
 
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))  # pgvector
     Base.metadata.create_all(engine)

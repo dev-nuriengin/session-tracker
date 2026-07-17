@@ -180,3 +180,9 @@ def project_history(slug: str):
     if not h:
         return {"error": f"unknown project '{slug}'"}
     return h
+
+
+@app.get("/search")
+def search(q: str, limit: int = 5):
+    """Semantic search across all projects' session logs (RAG)."""
+    return {"query": q, "results": repository.search_logs(q, limit=limit)}

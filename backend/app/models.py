@@ -12,10 +12,13 @@ domain-agnostic — an "item" is a ticket (IT), a bill (accounting), a deliverab
 
 from datetime import datetime, timezone
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+
+EMBED_DIM = 384  # bge-small-en-v1.5 (see embeddings.py)
 
 
 def _now() -> datetime:
@@ -119,6 +122,7 @@ class SessionLog(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), index=True)
     kind: Mapped[str] = mapped_column(String(20), default="note")  # note | step | summary | plan
     content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     session: Mapped["Session"] = relationship(back_populates="logs")

@@ -114,6 +114,17 @@ def remember(
 
 
 @app.command()
+def ask(query: str, limit: int = typer.Option(5, help="Max results")):
+    """Semantic search across ALL projects' session logs (RAG)."""
+    hits = repository.search_logs(query, limit=limit)
+    if not hits:
+        typer.echo("No matches (no embedded logs yet?).")
+        raise typer.Exit()
+    for h in hits:
+        typer.echo(f"  [{h['score']}] {h['project']} · {h['kind']}: {h['content']}")
+
+
+@app.command()
 def log(
     project: str,
     note: str,

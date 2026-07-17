@@ -29,18 +29,18 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 20 / 28 done. Idea locked (above). **Phases 4–7 complete (core · MCP · CLI · web).**
-The whole product loop exists: local Postgres core → three doors (MCP · CLI · web), all
-summary-first. Remaining are the showcase phases: RAG (8) · eval/observability (9) · ship (10).
+**Status:** 22 / 28 done. Idea locked (above). **Phases 4–8 complete (core · MCP · CLI · web · RAG).**
+Remaining: eval/observability (9) · ship (10) — plus deferred refinements (hybrid+rerank,
+cloud store, folder grouping in UI).
 
-**NEXT:** Phase 8 — **RAG over session logs**: add a pgvector embedding column to
-`session_logs` (+ memory), embed + chunk on write, and a retrieval tool/endpoint to "ask
-across all projects." Postgres already has pgvector.
+**NEXT:** Phase 9 — **eval, safety, observability**: Langfuse tracing on the LLM calls
+(graph); an LLM-as-judge eval on summaries; light guardrails/PII redaction on saved notes.
 
-**Web (Phase 7) in place:** `frontend/app/page.tsx` — status board (projects sidebar →
-compact overview → "Show full" drill-down) reading `GET /projects`, `/projects/{slug}`,
-`/projects/{slug}/history`. Backend `CORSMiddleware` for localhost:3000. Typechecks clean.
-Run: backend on :8000 + `cd frontend && npm run dev` → :3000. (Optional cloud store deferred.)
+**RAG (Phase 8) in place:** `embeddings.py` (LOCAL fastembed bge-small — nothing leaves
+the machine), pgvector `embedding` column on `session_logs`, embed-on-write in
+`add_session_log`, `repository.search_logs` (cosine). Exposed: MCP `search`, `sess ask`,
+`GET /search`. Verified: semantic ranking correct across projects. (`init_db` runs
+`CREATE EXTENSION vector`.) Also fixed: XSS on memory link in the web view (http(s) only).
 
 **MCP (Phase 5) in place:** `backend/app/mcp_server.py` — FastMCP `session-tracker`
 server exposing `list_projects` · `get_history` · `whats_next` · `save_progress` ·
@@ -97,10 +97,10 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] Next.js status board: projects sidebar → compact overview → "Show full" (items · memory · logs). Reads `GET /projects` + `/projects/{slug}` (+ `/history`); backend CORS added. Summary-first.
 - [ ] (later, opt-in) optional cloud store so a hosted UI can retrieve data
 
-## Phase 8 — RAG over session logs
-- [ ] pgvector embeddings + chunking of logs
-- [ ] Retrieval: ask across all projects/items
-- [ ] Hybrid search + rerank
+## Phase 8 — RAG over session logs ✅ (core)
+- [x] LOCAL embeddings (fastembed, bge-small) + pgvector column; embed on write (chunking deferred — log entries are short)
+- [x] Retrieval: ask across ALL projects — `repository.search_logs`; MCP `search`, `sess ask`, `GET /search`
+- [ ] Hybrid search + rerank (future refinement; pure vector for now)
 
 ## Phase 9 — Eval, safety, observability
 - [ ] Langfuse tracing end-to-end

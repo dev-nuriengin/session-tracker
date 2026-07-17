@@ -44,6 +44,13 @@ def list_memory(project: str) -> list[dict]:
 
 
 @mcp.tool()
+def search(query: str, limit: int = 5) -> list[dict]:
+    """Semantic search across ALL projects' session logs (RAG). Use this to answer
+    "have I done/seen X before?" across your whole history, not just one project."""
+    return repository.search_logs(query, limit=limit)
+
+
+@mcp.tool()
 def whats_next(project: str) -> str:
     """The single next step for a project (its first not-done item)."""
     return repository.get_status(project)
