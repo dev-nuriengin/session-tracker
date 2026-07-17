@@ -29,19 +29,20 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 13 / 28 done. Idea locked (above). **Phase 4 (Postgres core) complete.**
+**Status:** 16 / 28 done. Idea locked (above). **Phases 4 (core) + 5 (MCP, the heart) complete.**
 
-**NEXT:** Phase 5 — the **MCP server** (the heart). Build a FastMCP server over the
-repository so any agent gets: `list_projects` · `get_history` (pull-history-first) ·
-`save_progress` · `whats_next`. Then wire Claude Code to discover it (local config).
-The continuity payload already exists as `repository.get_history(slug)`.
+**NEXT:** Phase 6 — the **CLI (`sess`)**: interactively add/edit projects · folders ·
+items (build the map); query status/history; start/resume a session + save steps. Build
+it on the same `repository` the MCP server uses. (`cli/sess.py` skeleton exists.)
 
-**Core (Phase 4) in place:** `db.py` (sync SQLAlchemy + `DATABASE_URL`), `models.py`
-(Project · Folder[nestable] · Item · Session · SessionLog · Memory), `repository.py`
-(projects/folders/items/memory/session-logs + `get_history` continuity payload + seed).
-`tools.py` + `/agent` + `/graph` now read the **real DB**. New endpoints: `GET /projects`,
-`GET /projects/{slug}` (continuity payload). DB tables auto-created + seeded on startup
-(FastAPI lifespan). `data.py` is now seed-only.
+**MCP (Phase 5) in place:** `backend/app/mcp_server.py` — FastMCP `session-tracker`
+server exposing `list_projects` · `get_history` · `whats_next` · `save_progress` ·
+`add_memory` over the repository. Discovery: `.mcp.json` at repo root (stdio). **To use
+it in Claude Code: approve/restart so it loads the server.** Deps: `mcp`.
+
+**Core (Phase 4):** `db.py`, `models.py` (Project · Folder[nestable] · Item · Session ·
+SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` + `/agent`
++ `/graph` read the real DB; `GET /projects`, `GET /projects/{slug}`. `data.py` seed-only.
 
 **Run:** `docker compose up -d` · `cd backend && uv run uvicorn app.main:app --reload`.
 **Env:** `.env` (gitignored) → `ANTHROPIC_API_KEY`, `DATABASE_URL`. Model `claude-opus-4-8`.
@@ -75,10 +76,10 @@ The continuity payload already exists as `repository.get_history(slug)`.
 - [x] Final schema shape: **folders** (nestable; project → folders → items) + **memory** table (decisions · links · notes · transcripts)
 - [x] Wire real DB into tools/graph/endpoints; stub `data.py` demoted to seed-only
 
-## Phase 5 — MCP server ← THE HEART (agents' door)
-- [ ] FastMCP server over the core: list_projects · get_item/history · save_progress · whats_next
-- [ ] Continuity: on a new session, pull the item's history/decisions FIRST; capture progress behind the scenes
-- [ ] Claude Code (and any agent) discovers & uses it — local config, no per-agent setup
+## Phase 5 — MCP server ← THE HEART (agents' door) ✅
+- [x] FastMCP server over the core: list_projects · get_history · whats_next · save_progress · add_memory
+- [x] Continuity: get_history = pull-history-first payload; save_progress/add_memory = capture behind the scenes (tool descriptions steer the agent to call get_history first)
+- [x] Discovery via `.mcp.json` (stdio: `uv --directory backend run python -m app.mcp_server`) — user restarts/approves Claude Code to activate
 
 ## Phase 6 — CLI (`sess`) — your main door
 - [ ] Interactively add/edit projects · folders · items (build the map)
