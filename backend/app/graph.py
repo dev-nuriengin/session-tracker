@@ -20,7 +20,7 @@ from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START, END
 from pydantic import BaseModel, Field
 
-from .data import PROJECTS, TRACKERS
+from .tools import list_projects, read_tracker
 
 load_dotenv()  # ANTHROPIC_API_KEY — must be set before the model is created
 
@@ -64,12 +64,19 @@ class SessionState(TypedDict):
 
 
 def load(state: SessionState) -> dict:
-    """Load the session context for the project (reuses the Phase 1 tracker stub)."""
-    project = state["project"].strip().lower()
-    context = TRACKERS.get(
-        project, f"No tracker found for '{project}'. Known: {', '.join(PROJECTS)}."
-    )
+    """Load the session context by calling the read_tracker TOOL (not inlined)."""
+    context = read_tracker.invoke({"project": state["project"]})
     return {"context": context}
+
+
+def list_known(state: SessionState) -> dict:
+    """Unknown project → call the list_projects TOOL and stop with the options."""
+    return {"context": f"Project not found. Known projects: {list_projects.invoke({})}"}
+
+
+def route_after_load(state: SessionState) -> str:
+    """Conditional edge: no context found → list_known; otherwise → summarize."""
+    return "summarize" if state["context"] else "list_known"
 
 
 def summarize(state: SessionState) -> dict:
@@ -100,15 +107,19 @@ def approve(state: SessionState) -> dict:
 
 
 def build_graph():
-    """Wire the nodes into a linear graph: load → summarize → plan → approve."""
+    """Wire the graph. Happy path: load → summarize → plan → approve.
+    Branch: if load finds no project, route to list_known and stop."""
     g = StateGraph(SessionState)
     g.add_node("load", load)
+    g.add_node("list_known", list_known)
     g.add_node("summarize", summarize)
     g.add_node("plan", plan)
     g.add_node("approve", approve)
 
     g.add_edge(START, "load")
-    g.add_edge("load", "summarize")
+    # Conditional edge: load → (summarize | list_known) based on route_after_load
+    g.add_conditional_edges("load", route_after_load, ["summarize", "list_known"])
+    g.add_edge("list_known", END)
     g.add_edge("summarize", "plan")
     g.add_edge("plan", "approve")
     g.add_edge("approve", END)

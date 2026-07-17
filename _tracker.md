@@ -9,13 +9,18 @@
 
 ## ▸ Resume here (next session)
 
-**Status:** 8 / 24 done. Phase 1 complete; Phase 2 two-thirds done (graph + structured outputs).
+**Status:** 9 / 24 done. Phase 1 complete; **Phase 2 complete** (graph + structured outputs + tools-as-nodes).
 
 **Decisions (Phase 2):** LLM layer = **LangChain** (`langchain-anthropic`), not raw SDK — so provider swap is one line (`init_chat_model("anthropic:claude-opus-4-8")` → openai/xai). New **`/graph`** endpoint; `/agent` kept as reference.
 
-**NEXT:** Phase 2 last item — wire `list_projects` / `read_tracker` in as **graph nodes/edges** (currently `load` reuses the tracker stub directly; make the graph call the tools instead of inlining `TRACKERS`). That finishes Phase 2 → on to Phase 3 (checkpointing + real human-in-the-loop approve gate).
+**NEXT:** start Phase 3 — (1) checkpointing: add a `MemorySaver` so a session survives a restart (thread_id per session); (2) turn the stubbed `approve` node into a REAL human-in-the-loop gate that pauses before the plan is accepted (LangGraph `interrupt`); (3) auto-save at the context budget.
 
-**Structured outputs:** `graph.py` now has Pydantic `Summary(stage, headline)` + `Plan(steps=[NextStep(step, why)])`; nodes use `llm.with_structured_output(...)`. `SessionState.summary/plan` are typed objects, not strings.
+**Phase 2 code map:**
+- `graph.py` — `StateGraph`: load → (summarize → plan → approve | list_known), conditional edge via `route_after_load`. Pydantic `Summary`/`Plan`/`NextStep`. Provider in ONE `init_chat_model` line. `approve` auto-approves (real gate = Phase 3).
+- `tools.py` — LangChain `@tool` versions of `list_projects` / `read_tracker` (the graph calls these; `load` uses `read_tracker`, `list_known` uses `list_projects`).
+- `data.py` — shared `PROJECTS`/`TRACKERS`.
+- `main.py` — `/graph` endpoint; `/agent` + raw-SDK tools kept as the Phase 1 reference.
+- Verified: known project runs full pipeline; unknown project routes to `list_known` and stops.
 
 **Where the Phase 2 code is:**
 - `backend/app/graph.py` — `StateGraph` with nodes load → summarize → plan → approve; `SessionState` TypedDict; `run_graph(project)`. Provider set in ONE line (`init_chat_model`).
@@ -57,7 +62,7 @@
 ## Phase 2 — Port to LangGraph
 - [x] Model the state graph: load → summarize → plan → approve
 - [x] Structured outputs (Pydantic) for summary + plan
-- [ ] Wire tools as graph nodes & edges
+- [x] Wire tools as graph nodes & edges
 
 ## Phase 3 — State, memory, human-in-the-loop
 - [ ] Checkpointing: a session survives a restart (MemorySaver)
