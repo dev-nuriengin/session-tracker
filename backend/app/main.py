@@ -156,8 +156,17 @@ def projects():
 
 @app.get("/projects/{slug}")
 def project_detail(slug: str):
-    """A project's continuity payload: open items, memory, recent session logs."""
-    history = repository.get_history(slug)
-    if not history:
+    """Compact overview (summary-first). Drill into /history for the full payload."""
+    ov = repository.overview(slug)
+    if not ov:
         return {"error": f"unknown project '{slug}'"}
-    return history
+    return ov
+
+
+@app.get("/projects/{slug}/history")
+def project_history(slug: str):
+    """Deeper drill-down: open items + full memory + recent session logs."""
+    h = repository.get_history(slug)
+    if not h:
+        return {"error": f"unknown project '{slug}'"}
+    return h

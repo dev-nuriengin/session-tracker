@@ -40,6 +40,10 @@ via **MCP** for continuity. It is **NOT an agent** — it doesn't do work or gat
   is a generic **"item"** — a "ticket" (IT), a "bill" (accounting), a deliverable (design)
   are just domain labels. **Never bake IT jargon into schema/API/UI.** Hierarchy:
   **Project → sub-folders → items.**
+- **Progressive disclosure / token discipline.** Never dump all data to the agent at once
+  (it burns tokens). Default read = a compact **summary** (status, counts, a few titles);
+  deeper detail (full memory, all items, history) is fetched only on demand. `overview()`
+  = the cheap first look; `get_history()` = the heavy drill-down.
 - **`_tracker.md` is a temporary scaffold** — the product will track itself (dogfood),
   then it's retired.
 

@@ -22,11 +22,25 @@ def list_projects() -> list[str]:
 
 
 @mcp.tool()
-def get_history(project: str) -> dict:
-    """Pull a project's history FIRST when you start working on it: open items,
-    durable memory (decisions, repo links, notes), and recent session logs.
-    Call this at the start of every session so you never work without context."""
-    return repository.get_history(project)
+def overview(project: str) -> dict:
+    """Call this FIRST when you start on a project. A COMPACT summary — next step,
+    open-item count + a few titles, memory count, last activity. It is cheap and does
+    NOT dump everything. Drill deeper with list_items / list_memory only if you need to."""
+    return repository.overview(project)
+
+
+@mcp.tool()
+def list_items(project: str, include_done: bool = False) -> list[dict]:
+    """Drill-down: the project's items (open only unless include_done=true).
+    Use AFTER overview, only when you need the full list."""
+    return repository.list_items(project, include_done=include_done)
+
+
+@mcp.tool()
+def list_memory(project: str) -> list[dict]:
+    """Drill-down: the project's durable memory (decisions, links, notes).
+    Use AFTER overview, only when you need the details."""
+    return repository.list_memory(project)
 
 
 @mcp.tool()

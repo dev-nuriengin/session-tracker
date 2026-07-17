@@ -29,11 +29,16 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 16 / 28 done. Idea locked (above). **Phases 4 (core) + 5 (MCP, the heart) complete.**
+**Status:** 19 / 28 done. Idea locked (above). **Phases 4 (core) + 5 (MCP) + 6 (CLI) complete.**
 
-**NEXT:** Phase 6 — the **CLI (`sess`)**: interactively add/edit projects · folders ·
-items (build the map); query status/history; start/resume a session + save steps. Build
-it on the same `repository` the MCP server uses. (`cli/sess.py` skeleton exists.)
+**NEXT:** Phase 7 — the **web** (local read view): Next.js status board over the core
+(projects · folders · items · session history), reading the FastAPI `GET /projects` +
+`GET /projects/{slug}` endpoints. Frontend skeleton exists in `frontend/`.
+
+**CLI (Phase 6) in place:** `backend/app/cli.py` — `sess` command on the shared
+`repository` (`uv run sess list|status|show|add-project|add-folder|add-item|remember|log`).
+Console script wired via `[project.scripts]` + hatchling build. Old `cli/` skeleton
+(hardcoded list) is superseded — remove later.
 
 **MCP (Phase 5) in place:** `backend/app/mcp_server.py` — FastMCP `session-tracker`
 server exposing `list_projects` · `get_history` · `whats_next` · `save_progress` ·
@@ -81,10 +86,10 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] Continuity: get_history = pull-history-first payload; save_progress/add_memory = capture behind the scenes (tool descriptions steer the agent to call get_history first)
 - [x] Discovery via `.mcp.json` (stdio: `uv --directory backend run python -m app.mcp_server`) — user restarts/approves Claude Code to activate
 
-## Phase 6 — CLI (`sess`) — your main door
-- [ ] Interactively add/edit projects · folders · items (build the map)
-- [ ] Query status/history; start/resume a session; save steps
-- [ ] Retire the ad-hoc aliases
+## Phase 6 — CLI (`sess`) — your main door ✅
+- [x] Interactively add projects · folders · items (add-project / add-folder / add-item) — builds the map in the DB
+- [x] Query status/history (list · status · show) + save progress (log · remember)
+- [x] `sess` console script on the shared repository (`uv run sess …`); old `cli/` skeleton superseded (remove later)
 
 ## Phase 7 — Web — a local read view
 - [ ] Next.js status board: projects · folders · items · session history

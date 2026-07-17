@@ -68,14 +68,21 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 
 ## How an agent uses it (the flow)
 
-1. **New session / CLI opens** → the agent **first pulls the item's history** from the
-   tracker: last state, decisions, links, what was done last. It never starts blind
-   (*"I don't know this item's history"*).
-2. **While working** → the tracker **captures progress behind the scenes** — it pulls
+1. **New session / CLI opens** → the agent **first pulls a SUMMARY** of the item (status,
+   a few open items, counts) — a cheap overview, **never a full dump**. It never starts
+   blind (*"I don't know this item's history"*).
+2. **Drill down only as needed** → if the summary isn't enough, the agent asks for more
+   (full memory, all items, session history). **Progressive disclosure**, not one big load.
+3. **While working** → the tracker **captures progress behind the scenes** — it pulls
    *"what's your progress?"* and saves the work + item updates into itself.
-3. **Durable memory** → decisions, repo links, and meeting/decision notes are stored so
-   they persist across sessions and across agents.
-4. **Continuity** → the next session (any agent, any CLI) resumes with full context.
+4. **Durable memory** → decisions, repo links, and meeting/decision notes persist across
+   sessions and agents.
+5. **Continuity** → the next session (any agent, any CLI) resumes — again from the summary
+   first, drilling deeper only when required.
+
+> **Token discipline (core principle):** the tracker **never dumps everything at once** —
+> that burns tokens. It always returns a **summarized entry point first** (like a table),
+> and the agent goes **deeper on demand.**
 
 ## Privacy — local-first (hard default)
 

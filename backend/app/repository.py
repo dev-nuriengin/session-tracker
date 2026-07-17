@@ -5,7 +5,7 @@ functions; nobody else opens a SQLAlchemy session. This is the seam that makes
 the tracker "do all the job" — real DB reads/writes live here, not a stub dict.
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import models
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
@@ -29,6 +29,18 @@ def get_project(slug: str) -> models.Project | None:
         )
 
 
+def create_project(slug: str, name: str | None = None, kind: str = "personal",
+                   client: str | None = None) -> bool:
+    """Create a project. Returns False if the slug already exists."""
+    slug = slug.strip().lower()
+    with SessionLocal() as db:
+        if db.scalar(select(models.Project).where(models.Project.slug == slug)):
+            return False
+        db.add(models.Project(slug=slug, name=name or slug, kind=kind, client=client))
+        db.commit()
+        return True
+
+
 def get_status(slug: str) -> str:
     """Short status string for a project (built from its first not-done item).
     Returns '' if the project is unknown."""
@@ -46,6 +58,51 @@ def get_status(slug: str) -> str:
         if nxt is None:
             return f"{project.name}: all items done."
         return f"{project.name}: NEXT — {nxt.title}"
+
+
+def overview(slug: str) -> dict:
+    """The cheap FIRST look — a compact summary, not a full dump. Counts + a few
+    titles + last activity. Drill deeper with list_items / list_memory / get_history."""
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return {}
+        open_titles = db.scalars(
+            select(models.Item.title)
+            .where(models.Item.project_id == project.id, models.Item.status != "done")
+            .order_by(models.Item.position)
+        ).all()
+        mem_count = db.scalar(
+            select(func.count()).select_from(models.Memory)
+            .where(models.Memory.project_id == project.id)
+        )
+        last_log = db.scalar(
+            select(models.SessionLog.content)
+            .join(models.Session)
+            .where(models.Session.project_id == project.id)
+            .order_by(models.SessionLog.created_at.desc())
+        )
+        return {
+            "project": project.slug,
+            "next": open_titles[0] if open_titles else None,
+            "open_items": len(open_titles),
+            "open_preview": list(open_titles[:3]),  # a taste, not all of them
+            "memory_entries": mem_count or 0,
+            "last_activity": last_log,
+        }
+
+
+def list_items(slug: str, include_done: bool = False) -> list[dict]:
+    """Drill-down: all items for a project (open only unless include_done)."""
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return []
+        q = select(models.Item).where(models.Item.project_id == project.id)
+        if not include_done:
+            q = q.where(models.Item.status != "done")
+        rows = db.scalars(q.order_by(models.Item.position)).all()
+        return [{"id": i.id, "title": i.title, "status": i.status, "folder_id": i.folder_id} for i in rows]
 
 
 # ---- folders & items ----

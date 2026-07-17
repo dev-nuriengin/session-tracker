@@ -27,6 +27,9 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
   Doors = **MCP** (agents, primary — the heart), **CLI** (`sess`), **web** (local view).
 - **Continuity is the point:** a new session/CLI **pulls the item's history first** —
   the agent never says *"I don't know this item's history."*
+- **Progressive disclosure (token discipline):** always return/read a **summary first**
+  (a limited overview/table); drill deeper only on demand. **NEVER dump everything at once**
+  — it burns tokens. `overview()` = cheap first look; `get_history()` = heavy drill-down.
 - **Captures progress behind the scenes** and stores **concrete memory** (decisions, repo
   links, meeting/decision notes).
 - **Data is LOCAL & PRIVATE** — never committed, pushed, or cloud-synced (cloud = future,
