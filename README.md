@@ -15,15 +15,33 @@ session and ticked at the end — see this repo's own [`_tracker.md`](./_tracker
 
 ## Core idea
 
-> **The product is the tracker, not an agent.** We are **not** shipping a standalone
-> assistant. We're shipping the structured system that *any* agent (Claude Code, Codex,
-> Grok, …) plugs into to track sessions — over the CLI or the browser.
+> **The product is the tracker, not an agent.** It's a **brain / memory** — it holds
+> data (which projects exist, where each stands, what the items are) and remembers the
+> work. It does **not** do the work itself, and it does **not** gate or approve what an
+> agent does. We're shipping the structured memory that *any* agent (Claude Code, Codex,
+> Grok, …) plugs into — over the CLI or the browser.
 
-- **Primary user = AI agents.** As an agent works on a project, it reads the project's
-  status from the tracker and writes session progress back, so it knows how to behave
-  (resume here, what's next). The standard door for this is **MCP** — which makes **the
-  MCP server the heart of the product.**
+- **Primary user = AI agents.** As an agent works, the tracker (behind the scenes)
+  pulls its progress — *"what did you do, where are you?"* — and saves the work and
+  item updates into itself. The standard door for this is **MCP → the MCP server is
+  the heart of the product.**
+- **It holds concrete memory:** decisions, repo links (GitLab/GitHub), meeting/decision
+  notes — durable facts that survive across sessions.
+- **It guarantees continuity:** when a new CLI/session opens, the agent first pulls the
+  project's history from the tracker. It never starts blind (*"I don't know this item's
+  history"*).
 - Humans use it too, mainly via the **CLI**, sometimes the **web** view.
+
+## Structure (you set it up interactively)
+
+You build the map of your work in the tracker (via CLI/web); it's stored in the DB:
+
+- **Project** — a high-level thing you work on (a client, or a personal project)
+- **Sub-folders** — grouping inside a project
+- **Items** — the actual work units. **Domain-agnostic:** an "item" is a *ticket* in IT,
+  a *bill* in accounting, a *deliverable* in design — those are just labels.
+
+→ **Project → sub-folders → items.** (More "way-of-working" config comes later.)
 
 ## Architecture — one core, three doors
 
@@ -46,22 +64,29 @@ session and ticked at the end — see this repo's own [`_tracker.md`](./_tracker
   save steps.
 - **Web** — a read view (status board, session history, agent traces).
 - **LangGraph brain** — an *optional* helper on top of the core (summarize a session,
-  propose a plan, pause for human approval). Useful, but not the product.
+  propose next steps). Useful, but not the product.
 
-## How an agent is meant to use it (the flow)
+## How an agent uses it (the flow)
 
-1. **Start of session** → agent asks the tracker: *what projects exist, what's the
-   status of the one I'm on, what's next?*
-2. **During work** → agent saves steps / session progress back to the tracker.
-3. **Before acting on a plan** → the tracker's **plan-before-code** gate: the agent
-   proposes a plan and a human approves before it proceeds.
-4. **End of session** → status is persisted; the next session (any agent) can resume.
+1. **New session / CLI opens** → the agent **first pulls the item's history** from the
+   tracker: last state, decisions, links, what was done last. It never starts blind
+   (*"I don't know this item's history"*).
+2. **While working** → the tracker **captures progress behind the scenes** — it pulls
+   *"what's your progress?"* and saves the work + item updates into itself.
+3. **Durable memory** → decisions, repo links, and meeting/decision notes are stored so
+   they persist across sessions and across agents.
+4. **Continuity** → the next session (any agent, any CLI) resumes with full context.
 
-## Not in scope (by design)
+## Privacy — local-first (hard default)
 
-- **Auth / making it public** is a **deployment config**, not a product feature.
-  Session Tracker is a **local tool** by default; auth only matters *if* you choose to
-  expose it.
+- **All data is LOCAL and PRIVATE by default** — projects, items, decisions, and the
+  **conversations / progress you had with an agent** live only in your **local Postgres**.
+  Not committed, not pushed, not synced.
+- The **web view is local** (localhost); the **MCP server runs locally**.
+- **Later (not now): an optional cloud store**, so a hosted UI can retrieve your data —
+  but **only if you explicitly enable it in config**. Off by default; opt-in only.
+- The app *code* (this repo) is public on GitHub; the app *data* stays private.
+- Auth / going public is **deployment config, not a product feature.**
 
 ## Stack
 - **Backend:** FastAPI (Python, uv)

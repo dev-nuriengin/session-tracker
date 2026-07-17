@@ -1,106 +1,96 @@
-# Session Tracker — build progress + living example
+# Session Tracker — build progress (TEMPORARY scaffold)
 
-> This file is TWO things at once:
-> 1. The **build log** for making Session Tracker (phases + checkboxes below).
-> 2. A **living example of the product itself** — the exact pattern Session Tracker
->    formalizes: an agent reads status at session start, ticks items at session end.
+> ⚠️ **This file is a temporary bootstrap.** It's the manual build log used *while*
+> building Session Tracker. Once the product works, it **tracks itself** (dogfood) and
+> this file is retired — the build status moves into the tracker's own DB.
 >
-> Rules: mark done with `[x]`, not-done with `[ ]`. The **first `[ ]` item is NEXT**.
+> While it exists it doubles as a **living example** of the tracking pattern: read at
+> session start, tick items at the end.
+>
+> Rules: `[x]` done, `[ ]` not. The **first `[ ]` item is NEXT.**
 
-## What we're building (locked design — 2026-07-17)
+## What we're building (locked idea — 2026-07-17)
 
-**Session Tracker = a structured system-of-record for everything you're working on**
-(your company's 3 clients + your personal projects), that **AI agents use in a
-standard way** to know where each project stands and to save session progress.
+**Session Tracker = a local, private brain / memory for all your work.** It holds the
+structure and progress of everything you work on (a company's clients + personal
+projects); AI agents plug into it — primarily via **MCP** — so they always have
+continuity. **It is NOT an agent:** it doesn't do work and doesn't gate/approve coding.
+It *remembers* work.
 
-- **Primary user = AI agents (Option A).** Claude Code (and any MCP-capable agent)
-  uses the tracker *while it works* — reads status, saves steps — with **no per-agent
-  config**. That standard door is **MCP → MCP is the heart of the product.**
-- **One core, three doors:**
-  - **Core / single source of truth:** **Postgres (+pgvector)**. Holds projects →
-    tracking items/steps/status → session logs. **No local .md/.ai files as data.**
-  - **MCP server** → agents (primary consumer).
-  - **CLI (`sess`)** → your main hand-driven door.
-  - **Web** → a read view.
-- **The LangGraph brain** (summarize → plan → approve) = an **optional helper on top**,
-  not the product.
-- **Deployment (auth, local→public) is NOT a product feature** — it's optional config
-  if you ever expose it. Session Tracker is a **local tool** by default.
+- **Structure (user sets up interactively):** **Project → sub-folders → items.**
+- **Behavior:** captures progress behind the scenes (pulls *"what's your progress?"* and
+  saves it) · holds **concrete memory** (decisions, repo links, meeting/decision notes) ·
+  guarantees **continuity** (a new session/CLI pulls the item's history first).
+- **One core, three doors:** core = **local Postgres (+pgvector)** (single source of
+  truth); doors = **MCP** (agents — the heart) · **CLI** (`sess`) · **web** (local view).
+- **Privacy:** all DATA is **local & private, never public.** Optional cloud store later,
+  **opt-in only** (for a hosted UI). App *code* is public on GitHub; app *data* is not.
+- The **LangGraph brain** (summarize/plan) is an **optional helper**, not the product.
 
 ## ▸ Resume here (next session)
 
-**Status:** 10 / 30 done. Design pivoted to **MCP-primary + Postgres core** (above).
-Phases reordered: **Core DB → MCP → CLI → Web** now lead.
+**Status:** 11 / 28 done. Idea locked (above). Phase 4 (Postgres core) in progress.
 
-**NEXT:** Phase 4 — build the **core data model in Postgres**: tables for projects,
-tracking items/steps, sessions + session logs; a thin repository layer; replace the
-stub `TRACKERS` dict with real DB reads/writes. This unblocks MCP (Phase 5, the heart).
+**NEXT:** finish Phase 4 — extend the schema to the final shape: add **folders**
+(project → folders → items) and a **decisions/memory** table (decisions, repo links,
+notes). Then wire the real DB into tools/graph/endpoints (retire the stub `data.py`).
+After that → Phase 5: the **MCP server** (the heart) with continuity (pull-history-first
++ save-progress-behind-the-scenes).
 
-**Also open (Phase 3):** real approve gate (`interrupt`); persistence swap
-MemorySaver → PostgresSaver once the DB exists. **Dropped:** "auto-save to local .md"
-(wrong — data lives in the tracker's DB, not local files).
+**Built this phase:** `db.py` (sync SQLAlchemy engine/session + `DATABASE_URL`),
+`models.py` (projects · tracking_items · sessions · session_logs — **schema v1**, seeded
+from the old stub), `repository.py` (`list_projects` / `get_status` / `add_session_log` /
+`seed`). Verified against local Postgres.
 
-**Code so far (learning + helper brain, all under `backend/app/`):**
-- `main.py` — FastAPI. `/chat` (SSE stream), `/agent` (hand-built tool loop — Phase 1),
-  `/graph` (LangGraph pipeline — Phase 2).
-- `graph.py` — `StateGraph`: load → summarize → plan → approve (+ conditional edge),
-  Pydantic `Summary`/`Plan`, provider in one `init_chat_model` line, `MemorySaver` + `thread_id`.
-- `tools.py` — LangChain `@tool` `list_projects` / `read_tracker`.
-- `data.py` — **stub** `PROJECTS`/`TRACKERS` → to be replaced by Postgres in Phase 4.
+**Run:** `docker compose up -d` · `cd backend && uv run uvicorn app.main:app --reload`.
+**Env:** `.env` (gitignored) → `ANTHROPIC_API_KEY`, `DATABASE_URL`. Model `claude-opus-4-8`.
 
-**Run:** `docker compose up -d` · `cd backend && uv run uvicorn app.main:app --reload`
-· `cd frontend && npm run dev`. **Env:** `.env` (gitignored) → `ANTHROPIC_API_KEY`;
-model `claude-opus-4-8`.
-
-**Git:** Phase 0–2 pushed (`dev-nuriengin`). Phase 3 checkpointing + this pivot uncommitted.
-
-**Known follow-up:** LangGraph warns Pydantic `Summary`/`Plan` are "unregistered msgpack
-types" — fix by storing `.model_dump()` dicts (do it when wiring DB persistence).
+**Git:** Phase 0–3 + design pivot pushed (`dev-nuriengin`). Phase 4 core code uncommitted.
 
 ---
 
 ## Phase 0 — Scaffold & method
-- [x] .ai/ workspace + _tracker.md spec (index-vs-detail, plan-before-code)
 - [x] docker-compose: Postgres+pgvector · FastAPI · Next.js skeleton
 - [x] sess CLI skeleton (Python · Typer): picker · start · ask stubs
+- [x] Repo bootstrap + this build scaffold
 
 ## Phase 1 — First agent, from scratch (learning: how tool-calling works)
 - [x] One end-to-end Claude call from FastAPI, streamed over SSE
 - [x] Build the agent loop by hand: tool-calling while-loop (no framework)
 - [x] First tools: list_projects · read_tracker
 
-## Phase 2 — LangGraph brain (the optional helper)
+## Phase 2 — LangGraph brain (optional helper)
 - [x] Model the state graph: load → summarize → plan → approve
 - [x] Structured outputs (Pydantic) for summary + plan
 - [x] Wire tools as graph nodes & edges
 
-## Phase 3 — State, memory, human-in-the-loop
+## Phase 3 — Brain state (optional helper)
 - [x] Checkpointing: session resumes in-process (MemorySaver)
-- [ ] Real human-in-the-loop approve gate (interrupt → Command resume)
-- [ ] Persist sessions to Postgres (MemorySaver → PostgresSaver) [after Phase 4]
+> Dropped (not tracker features): "approve-before-code gate" — the tracker does NOT gate
+> coding; "auto-save at context budget" — replaced by real progress capture into the DB.
 
-## Phase 4 — Core data model (Postgres) ← THE STORE, next up
-- [ ] Schema: projects · tracking_items/steps · sessions · session_logs
-- [ ] Repository/data layer over the schema (async SQLAlchemy or similar)
-- [ ] Replace stub TRACKERS/PROJECTS with real DB reads/writes
+## Phase 4 — Core data model (Postgres) ← THE STORE, in progress
+- [x] DB engine/session (db.py) + repository layer + schema v1 (projects · items · sessions · session_logs), seeded
+- [ ] Final schema shape: add **folders** (project → folders → items) + **decisions/memory** table (decisions · repo links · notes)
+- [ ] Wire real DB into tools/graph/endpoints; retire the stub `data.py`
 
 ## Phase 5 — MCP server ← THE HEART (agents' door)
-- [ ] Build the MCP server (FastMCP) over the core: list_projects · get_status · save_step · whats_next
-- [ ] Claude Code discovers & calls the tools (no per-agent config)
-- [ ] Local + remote server config
+- [ ] FastMCP server over the core: list_projects · get_item/history · save_progress · whats_next
+- [ ] Continuity: on a new session, pull the item's history/decisions FIRST; capture progress behind the scenes
+- [ ] Claude Code (and any agent) discovers & uses it — local config, no per-agent setup
 
 ## Phase 6 — CLI (`sess`) — your main door
-- [ ] sess: list/query projects + tracking items from the core
-- [ ] sess: start/resume a session; save steps
+- [ ] Interactively add/edit projects · folders · items (build the map)
+- [ ] Query status/history; start/resume a session; save steps
 - [ ] Retire the ad-hoc aliases
 
-## Phase 7 — Web — a read view
-- [ ] Next.js status board: projects · items · session history
-- [ ] Agent traces view
+## Phase 7 — Web — a local read view
+- [ ] Next.js status board: projects · folders · items · session history
+- [ ] (later, opt-in) optional cloud store so a hosted UI can retrieve data
 
 ## Phase 8 — RAG over session logs
 - [ ] pgvector embeddings + chunking of logs
-- [ ] Retrieval: ask across all trackers
+- [ ] Retrieval: ask across all projects/items
 - [ ] Hybrid search + rerank
 
 ## Phase 9 — Eval, safety, observability
@@ -109,4 +99,4 @@ types" — fix by storing `.model_dump()` dicts (do it when wiring DB persistenc
 - [ ] Guardrails + PII redaction
 
 ## Phase 10 — Ship
-- [ ] Dockerize + deploy (auth/config only if going public)
+- [ ] Dockerize for local run; optional cloud/UI + auth only if the user enables it
