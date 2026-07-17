@@ -113,6 +113,22 @@ def remember(
     typer.echo("✓ saved to memory" if ok else f"unknown project '{project}'")
 
 
+@app.command("eval")
+def eval_cmd(project: str = typer.Argument(None, help="Project to eval (default: all)")):
+    """LLM-as-judge: score the brain's summary for a project (or all)."""
+    from . import eval as _eval  # lazy — don't load the judge unless used
+
+    rows = _eval.evaluate([project] if project else None)
+    if not rows:
+        typer.echo("Nothing to eval.")
+        raise typer.Exit()
+    for r in rows:
+        typer.echo(
+            f"  {r['project']}: faithfulness={r['faithfulness']} "
+            f"conciseness={r['conciseness']} — {r['reason']}"
+        )
+
+
 @app.command()
 def ask(query: str, limit: int = typer.Option(5, help="Max results")):
     """Semantic search across ALL projects' session logs (RAG)."""

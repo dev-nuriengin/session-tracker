@@ -21,6 +21,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from pydantic import BaseModel, Field
 
+from . import guardrails, observability
 from .tools import list_projects, read_tracker
 
 load_dotenv()  # ANTHROPIC_API_KEY — must be set before the model is created
@@ -83,7 +84,7 @@ def route_after_load(state: SessionState) -> str:
 def summarize(state: SessionState) -> dict:
     """Ask Claude for a structured status summary (returns a Summary object)."""
     prompt = (
-        f"Project '{state['project']}' status:\n{state['context']}\n\n"
+        f"Project '{state['project']}' status:\n{guardrails.redact(state['context'])}\n\n"
         "Summarize where this project stands."
     )
     summary = llm.with_structured_output(Summary).invoke(prompt)
@@ -94,7 +95,7 @@ def plan(state: SessionState) -> dict:
     """Ask Claude to propose structured next steps (returns a Plan object)."""
     prompt = (
         f"Project '{state['project']}'.\n"
-        f"Status: {state['context']}\n"
+        f"Status: {guardrails.redact(state['context'])}\n"
         f"Summary: {state['summary'].headline}\n\n"
         "Propose the 3 most important next steps, most important first."
     )
@@ -138,5 +139,8 @@ session_graph = build_graph()
 def run_graph(project: str, thread_id: str | None = None) -> dict:
     """Run the pipeline for a project. thread_id names the session so its state
     is checkpointed and can be resumed; defaults to the project name."""
-    config = {"configurable": {"thread_id": thread_id or project}}
+    config = {
+        "configurable": {"thread_id": thread_id or project},
+        "callbacks": observability.callbacks(),  # Langfuse if opted in, else []
+    }
     return session_graph.invoke({"project": project}, config)

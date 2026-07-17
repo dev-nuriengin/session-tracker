@@ -29,18 +29,17 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-**Status:** 22 / 28 done. Idea locked (above). **Phases 4–8 complete (core · MCP · CLI · web · RAG).**
-Remaining: eval/observability (9) · ship (10) — plus deferred refinements (hybrid+rerank,
-cloud store, folder grouping in UI).
+**Status:** 25 / 28 done. Idea locked (above). **Phases 4–9 complete.** Only Phase 10 (ship)
+left, plus deferred refinements (hybrid+rerank, cloud store, folder grouping in UI).
 
-**NEXT:** Phase 9 — **eval, safety, observability**: Langfuse tracing on the LLM calls
-(graph); an LLM-as-judge eval on summaries; light guardrails/PII redaction on saved notes.
+**NEXT:** Phase 10 — **ship**: a `docker compose` that runs the whole thing locally
+(db + backend); document running the MCP server + CLI + web; note that cloud/UI + auth are
+opt-in only (not default).
 
-**RAG (Phase 8) in place:** `embeddings.py` (LOCAL fastembed bge-small — nothing leaves
-the machine), pgvector `embedding` column on `session_logs`, embed-on-write in
-`add_session_log`, `repository.search_logs` (cosine). Exposed: MCP `search`, `sess ask`,
-`GET /search`. Verified: semantic ranking correct across projects. (`init_db` runs
-`CREATE EXTENSION vector`.) Also fixed: XSS on memory link in the web view (http(s) only).
+**Eval/observability (Phase 9) in place:** `observability.py` (Langfuse, opt-in/off by
+default), `eval.py` + `sess eval` (LLM-as-judge: faithfulness + conciseness),
+`guardrails.py` (`redact()` at the LLM boundary — wired into the graph's summarize/plan
+prompts). Deps: `langfuse`.
 
 **MCP (Phase 5) in place:** `backend/app/mcp_server.py` — FastMCP `session-tracker`
 server exposing `list_projects` · `get_history` · `whats_next` · `save_progress` ·
@@ -102,10 +101,10 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] Retrieval: ask across ALL projects — `repository.search_logs`; MCP `search`, `sess ask`, `GET /search`
 - [ ] Hybrid search + rerank (future refinement; pure vector for now)
 
-## Phase 9 — Eval, safety, observability
-- [ ] Langfuse tracing end-to-end
-- [ ] LLM-as-judge eval on summaries
-- [ ] Guardrails + PII redaction
+## Phase 9 — Eval, safety, observability ✅
+- [x] Langfuse tracing — `observability.callbacks()`, OPT-IN via env (off by default = local-first); wired into the graph
+- [x] LLM-as-judge eval on summaries — `eval.py` (faithfulness + conciseness), `sess eval [project]`
+- [x] Guardrails: PII/secret redaction at the LLM boundary (`guardrails.redact`), not on local storage
 
 ## Phase 10 — Ship
 - [ ] Dockerize for local run; optional cloud/UI + auth only if the user enables it
