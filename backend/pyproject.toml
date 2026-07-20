@@ -1,7 +1,7 @@
 [project]
-name = "session-tracker-backend"
+name = "trackden-backend"
 version = "0.1.0"
-description = "Session Tracker API"
+description = "Trackden API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sess = "app.cli:app"
+trackden = "app.cli:app"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,9 +1,14 @@
-# Session Tracker
+# Trackden
 
-**A structured system-of-record for everything you're working on — built for AI agents to use.**
+**A structured system-of-record for everything you're working on — built for ANY AI agent to use.**
+
+> **First principle — LLM-agnostic.** Trackden works with **any** agent (Claude, Codex, Grok,
+> a terminal, an IDE). No vendor is privileged. The agnostic contract is **MCP**; on-disk
+> files use vendor-neutral names, and any per-vendor file (`CLAUDE.md`, `AGENTS.md`, …) is a
+> thin shim that just redirects to the MCP tools.
 
 You (and many people) juggle several projects at once: a company's multiple clients
-*plus* personal projects, all in progress simultaneously. Session Tracker is one place
+*plus* personal projects, all in progress simultaneously. Trackden is one place
 that knows, per project, **what it is, where it stands, what the tracking items/steps
 are, and what happened in each work session** — and exposes that to AI agents in a
 **standard way** so they can read status and save progress *while they work*, with no
@@ -12,6 +17,10 @@ per-agent configuration.
 It turns a manual way-of-working (a `_tracker.md` per project, read at the start of a
 session and ticked at the end — see this repo's own [`_tracker.md`](./_tracker.md) as a
 **living example**) into a real product.
+
+## Quickstart
+
+**New here? → [`QUICKSTART.md`](./QUICKSTART.md) — get running and give your agent memory in 5 minutes.**
 
 ## Core idea
 
@@ -48,19 +57,20 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 ```
                          ┌──────────────── doors ────────────────┐
    AI agents  ─────────▶ │  MCP server   (agents — primary)       │
-   You (terminal) ─────▶ │  CLI  (sess)  (your main hand door)    │ ─────▶ ┌──────────┐
+   You (terminal) ─────▶ │  CLI  (trackden)  (your main hand door)    │ ─────▶ ┌──────────┐
    You (browser)  ─────▶ │  Web          (read view)              │        │  CORE    │
                          └────────────────────────────────────────┘        │ Postgres │
                                                                             │ +pgvector│
    optional helper: LangGraph "brain" (summarize → plan → approve)  ──────▶ └──────────┘
 ```
 
-- **Core / single source of truth: Postgres (+pgvector).** Holds `projects →
-  tracking items/steps/status → session logs`. **All data lives here — no local
-  `.md`/`.ai` files as the data model.** (pgvector powers semantic search over session
-  logs later.)
+- **Hybrid store (no-overlap rule).** **Postgres** owns *state* — `projects → items →
+  status → session logs` + embeddings. **Per-project guidance files** (arch, way-of-work,
+  decisions; vendor-neutral names) own *durable human knowledge* — human-editable, git-friendly.
+  **pgvector** is a derived semantic-search index over **both**. *(Planned: today's build is
+  DB-only; the guidance-files layer is the next phase. Full spec: `BUILD_NOTES.md`.)*
 - **MCP server** — the primary door; how agents consume the tracker in a standard way.
-- **CLI (`sess`)** — the main human door: query projects/items, start/resume sessions,
+- **CLI (`trackden`)** — the main human door: query projects/items, start/resume sessions,
   save steps.
 - **Web** — a read view (status board, session history, agent traces).
 - **LangGraph brain** — an *optional* helper on top of the core (summarize a session,
@@ -86,9 +96,9 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 
 ## Privacy — local-first (hard default)
 
-- **All data is LOCAL and PRIVATE by default** — projects, items, decisions, and the
-  **conversations / progress you had with an agent** live only in your **local Postgres**.
-  Not committed, not pushed, not synced.
+- **All data is LOCAL and PRIVATE by default** — *state* (projects, items, progress) lives
+  only in your **local Postgres**; not synced anywhere unless you opt in. *Guidance files*
+  are yours to back up to a **private** git repo if you want (still private — never public).
 - The **web view is local** (localhost); the **MCP server runs locally**.
 - **Later (not now): an optional cloud store**, so a hosted UI can retrieve your data —
   but **only if you explicitly enable it in config**. Off by default; opt-in only.
@@ -101,7 +111,7 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 search make **zero LLM calls** — the LLM (Claude Code / any agent) brings its own
 intelligence and talks to the tracker through MCP. The app **boots and serves with no key**.
 
-The **optional brain** (`/graph`, `/agent`, `/chat`, `sess eval`) *does* call Claude, so it
+The **optional brain** (`/graph`, `/agent`, `/chat`, `trackden eval`) *does* call Claude, so it
 reads `ANTHROPIC_API_KEY` — but **only the moment you actually use it** (the client is built
 lazily). The brain earns its keep when you're at the **CLI/web without an agent** (on-demand
 summary / suggested next steps) or for **background jobs** — otherwise agents do the thinking.
@@ -110,7 +120,7 @@ summary / suggested next steps) or for **background jobs** — otherwise agents 
 - **Backend:** FastAPI (Python, uv)
 - **Core store:** Postgres + pgvector
 - **Agent door:** MCP server (FastMCP)
-- **CLI:** Python · Typer (`sess`)
+- **CLI:** Python · Typer (`trackden`)
 - **Web:** Next.js
 - **Optional brain:** LangGraph + LangChain (provider-swappable — `init_chat_model`)
 - **Model:** `claude-opus-4-8` (swappable to OpenAI/xAI via one line)
@@ -134,7 +144,7 @@ cd frontend && npm run dev                                 # web view → :3000
 
 **The three doors (all on the same local core):**
 - **MCP** (agents): `.mcp.json` wires Claude Code to it, or run `uv run python -m app.mcp_server`
-- **CLI** (you): `uv run sess list` · `sess show <p>` · `sess add-project <slug>` · `sess ask "<q>"` · `sess eval`
+- **CLI** (you): `uv run trackden list` · `trackden show <p>` · `trackden add-project <slug>` · `trackden ask "<q>"` · `trackden eval`
 - **Web**: http://localhost:3000
 
 **Optional (off by default, opt-in):** Langfuse tracing (`LANGFUSE_*` env vars) · a cloud

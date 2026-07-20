@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 
 from . import repository
 
-mcp = FastMCP("session-tracker")
+mcp = FastMCP("trackden")
 
 
 @mcp.tool()

@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Session Tracker API", lifespan=lifespan)
+app = FastAPI(title="Trackden API", lifespan=lifespan)
 
 # Local web door (Next.js dev server) needs CORS to read the API.
 app.add_middleware(
@@ -51,7 +51,7 @@ def health():
 
 @app.get("/")
 def root():
-    return {"app": "session-tracker", "message": "backend is running"}
+    return {"app": "trackden", "message": "backend is running"}
 
 
 class ChatIn(BaseModel):

@@ -1,9 +1,9 @@
-"""sess — Session Tracker CLI (Phase 6). Your main hand-driven door into the core.
+"""trackden — Trackden CLI (Phase 6). Your main hand-driven door into the core.
 
 Talks to the SAME `repository` the MCP server and the API use — one core, three
 doors. Data is read from / written to the local Postgres, never a hardcoded list.
 
-Run:  `uv run sess <command>`   (or `uv run python -m app.cli <command>`)
+Run:  `uv run trackden <command>`   (or `uv run python -m app.cli <command>`)
 """
 
 import typer
@@ -11,7 +11,7 @@ import typer
 from . import repository
 
 app = typer.Typer(
-    help="Session Tracker — one door into all your work.",
+    help="Trackden — one door into all your work.",
     no_args_is_help=True,
 )
 
@@ -21,7 +21,7 @@ def list_projects():
     """List all projects."""
     projects = repository.list_projects()
     if not projects:
-        typer.echo("No projects yet. Add one:  sess add-project <slug>")
+        typer.echo("No projects yet. Add one:  trackden add-project <slug>")
         raise typer.Exit()
     typer.echo("Projects:")
     for i, name in enumerate(projects, 1):

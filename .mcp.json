@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "session-tracker": {
+    "trackden": {
       "command": "uv",
       "args": ["--directory", "backend", "run", "python", "-m", "app.mcp_server"]
     }

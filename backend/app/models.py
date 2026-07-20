@@ -4,7 +4,7 @@
     projects → sessions → session_logs             (what happened, per session)
     projects → memory                              (durable facts: decisions, links, notes)
 
-This is Session Tracker's single source of truth. All doors (MCP, CLI, web) read
+This is Trackden's single source of truth. All doors (MCP, CLI, web) read
 and write these tables; nothing lives in local files. Terminology is
 domain-agnostic — an "item" is a ticket (IT), a bill (accounting), a deliverable
 (design); the schema stays generic.

@@ -57,7 +57,7 @@ export default function Home() {
     <div className="flex min-h-screen bg-zinc-50 font-sans text-zinc-900 dark:bg-black dark:text-zinc-100">
       {/* Sidebar: projects (the summarized entry table) */}
       <aside className="w-64 shrink-0 border-r border-zinc-200 p-4 dark:border-zinc-800">
-        <h1 className="mb-1 text-lg font-semibold">Session Tracker</h1>
+        <h1 className="mb-1 text-lg font-semibold">Trackden</h1>
         <p className="mb-4 text-xs text-zinc-500">local · private</p>
         <nav className="flex flex-col gap-1">
           {projects.map((p) => (
