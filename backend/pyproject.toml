@@ -23,6 +23,16 @@ dependencies = [
 [project.scripts]
 trackden = "app.cli:app"
 
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "db: needs a running Postgres (auto-skipped when it is not reachable)",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
