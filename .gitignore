@@ -12,3 +12,6 @@ out/
 # OS / editor
 .DS_Store
 .vscode/
+
+# SDD scratch (plans, ledgers, review packages) — never committed
+.superpowers/
