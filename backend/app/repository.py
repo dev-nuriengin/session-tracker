@@ -5,12 +5,21 @@ functions; nobody else opens a SQLAlchemy session. This is the seam that makes
 the tracker "do all the job" — real DB reads/writes live here, not a stub dict.
 """
 
+from pathlib import Path
+
 from sqlalchemy import func, select
 
 from . import models
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
 from .db import SessionLocal, init_db
 from .embeddings import embed
+from .tracker_md import DONE, TODO
+
+
+def _norm_path(raw: str) -> str:
+    """One canonical spelling of a filesystem path, so cwd→project lookups match
+    regardless of trailing slashes, `~`, or symlinks."""
+    return str(Path(raw).expanduser().resolve())
 
 
 # ---- projects ----
@@ -31,13 +40,19 @@ def get_project(slug: str) -> models.Project | None:
 
 
 def create_project(slug: str, name: str | None = None, kind: str = "personal",
-                   client: str | None = None) -> bool:
+                   client: str | None = None, repo_path: str | None = None) -> bool:
     """Create a project. Returns False if the slug already exists."""
     slug = slug.strip().lower()
     with SessionLocal() as db:
         if db.scalar(select(models.Project).where(models.Project.slug == slug)):
             return False
-        db.add(models.Project(slug=slug, name=name or slug, kind=kind, client=client))
+        db.add(models.Project(
+            slug=slug,
+            name=name or slug,
+            kind=kind,
+            client=client,
+            repo_path=_norm_path(repo_path) if repo_path else None,
+        ))
         db.commit()
         return True
 
@@ -104,6 +119,86 @@ def list_items(slug: str, include_done: bool = False) -> list[dict]:
             q = q.where(models.Item.status != "done")
         rows = db.scalars(q.order_by(models.Item.position)).all()
         return [{"id": i.id, "title": i.title, "status": i.status, "folder_id": i.folder_id} for i in rows]
+
+
+def set_repo_path(slug: str, repo_path: str) -> bool:
+    """Point an existing project at a repo. False if the project is unknown."""
+    with SessionLocal() as db:
+        project = db.scalar(
+            select(models.Project).where(models.Project.slug == slug.strip().lower())
+        )
+        if project is None:
+            return False
+        project.repo_path = _norm_path(repo_path)
+        db.commit()
+        return True
+
+
+def get_project_by_repo_path(repo_path: str) -> models.Project | None:
+    """Which project lives in this directory? (Powers cwd→project detection.)"""
+    with SessionLocal() as db:
+        return db.scalar(
+            select(models.Project).where(models.Project.repo_path == _norm_path(repo_path))
+        )
+
+
+def import_items(slug: str, items: list[dict]) -> int:
+    """Bulk-create items from parsed markdown, creating folders by name as needed.
+
+    Each dict is `{"title", "status", "folder"}`. Any status other than todo/done is
+    coerced to todo — richer statuses are the user's to set, never inferred from a file.
+    Returns how many items were created (0 if the project is unknown).
+    """
+    with SessionLocal() as db:
+        project = db.scalar(
+            select(models.Project).where(models.Project.slug == slug.strip().lower())
+        )
+        if project is None:
+            return 0
+
+        folders: dict[str, int] = {}
+        created = 0
+        for position, raw in enumerate(items):
+            name = raw.get("folder")
+            folder_id = None
+            if name:
+                if name not in folders:
+                    folder = models.Folder(
+                        project_id=project.id, name=name, position=len(folders)
+                    )
+                    db.add(folder)
+                    db.flush()
+                    folders[name] = folder.id
+                folder_id = folders[name]
+            status = raw.get("status") if raw.get("status") in (TODO, DONE) else TODO
+            db.add(models.Item(
+                project_id=project.id,
+                folder_id=folder_id,
+                title=raw["title"],
+                status=status,
+                position=position,
+            ))
+            created += 1
+        db.commit()
+        return created
+
+
+def items_with_folders(slug: str) -> list[dict]:
+    """Every item plus its folder NAME — the shape `render_tracker_md` wants."""
+    with SessionLocal() as db:
+        project = db.scalar(
+            select(models.Project).where(models.Project.slug == slug.strip().lower())
+        )
+        if project is None:
+            return []
+        rows = db.execute(
+            select(models.Item.title, models.Item.status, models.Folder.name)
+            .outerjoin(models.Folder, models.Item.folder_id == models.Folder.id)
+            .where(models.Item.project_id == project.id)
+            .order_by(models.Item.position, models.Item.id)
+        ).all()
+        return [{"title": title, "status": status, "folder": folder}
+                for title, status, folder in rows]
 
 
 # ---- folders & items ----

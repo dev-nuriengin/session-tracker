@@ -35,6 +35,9 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200))
     kind: Mapped[str] = mapped_column(String(20), default="personal")  # personal | client
     client: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # absolute, resolved path of the repo this project lives in (set by `trackden onboard`);
+    # this is what later lets a tool map "the cwd I am in" → "this project".
+    repo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     folders: Mapped[list["Folder"]] = relationship(

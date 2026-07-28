@@ -36,3 +36,19 @@ def init_db() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))  # pgvector
     Base.metadata.create_all(engine)
+    _migrate()
+
+
+def _migrate() -> None:
+    """Idempotent column top-ups.
+
+    `create_all` creates missing TABLES but never alters an existing one, so a column
+    added to a model would silently never reach a database that already has the table.
+    Until real migrations land, each additive column gets one `IF NOT EXISTS` line here.
+    """
+    statements = (
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_path VARCHAR(500)",
+    )
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
