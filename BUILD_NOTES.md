@@ -100,6 +100,80 @@ behind the tool, so routing can't go wrong and stays agnostic. Tool descriptions
 - New: per-project **wrapper-folder scaffolder** (feeds the onboarding flow, #2).
 - `search` must also embed & index **guidance files**, not just logs.
 
+## LOCKED DESIGN — Onboarding (`trackden onboard`) [DECIDED 2026-07-28]
+
+How a project gets **into** Trackden. Builds directly on the hybrid storage model above:
+the DB gets the project + items (**state**), the central workspace gets the vendor-neutral
+guidance **files**. Name confirmed **Trackden** (no rename).
+
+### 1 · Command shape
+
+- `trackden onboard` → **interactive wizard** (the default path).
+- `trackden onboard <slug> --name … --kind … --client … --repo … --no-import` → scriptable.
+- Run from inside a repo (repo path defaults to cwd when it's a git repo), or pass `--repo`.
+
+### 2 · Steps
+
+1. **Identify** — name → slug → kind (`personal | client`) → repo path.
+2. **Scan & import** — auto-detect existing tracker/guidance files (§3).
+3. **Create DB project** — project row **+ `repo_path`** (this is what later powers
+   cwd→project detection).
+4. **Scaffold central guidance** — the workspace folder (§4).
+5. **Summary** — print what was created + `trackden show <slug>` to review.
+
+### 3 · Auto-detect & import — made safe, not fragile
+
+- **Scan list** (configurable, in priority order): `**/_tracker.md` ·
+  `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `CLAUDE.md` · `AGENTS.md`.
+- **Parse** the common pattern: checkbox lists (`[x]`→`done`, `[ ]`→`todo`),
+  `##` headings → folders. Only `todo`/`done` are inferred — the wider status set
+  (blocked/parked/doing) is set by hand later, never guessed.
+- **Map** a found `CLAUDE.md` → seeds the central `_way-of-work.md`.
+- **Review gate — this is the part that makes it safe:** print
+  *"Found 12 items in `main-plans/_tracker.md` — import? (y / n / edit)"* **before any write.**
+  Nothing is written blind.
+- **Fallback:** nothing parses cleanly → fresh scaffold, no error.
+
+### 4 · What gets scaffolded (central workspace)
+
+**Wrapper home = CENTRAL.** Repos stay **untouched**; guidance is reached via MCP only.
+
+```
+~/.trackden/                     ← one git repo → a single `git push` backs up all guidance
+└── projects/<slug>/
+    ├── _way-of-work.md          guidance (seeded from the repo's CLAUDE.md if found)
+    ├── _arch.md                 guidance (template)
+    ├── _decisions.md            guidance (template)
+    └── _tracker.md              GENERATED mirror of DB state — never hand-edited
+```
+
+### 5 · Where the data lands
+
+| Thing | Home |
+|---|---|
+| project (`slug`, `name`, `kind`, `client`, **`repo_path`**) | **DB** |
+| imported items + status | **DB** |
+| `_way-of-work.md` · `_arch.md` · `_decisions.md` | **Files** (central) |
+| `_tracker.md` | **Generated** from DB (derived, not a source) |
+
+### 6 · Deferred — flagged, not designed
+
+- **Auto-trigger** ("call MCP first" when a repo is opened): repos stay untouched, so this
+  needs a **launcher/alias**, which is its own design. `onboard` may *offer* to print an
+  alias snippet.
+- **Agent-driven onboard** via an MCP tool — **CLI-first** now, expose over MCP later.
+
+### 7 · Implementation notes (found while planning, 2026-07-28)
+
+- `Project` has **no `repo_path`** column yet, and `init_db()` only does
+  `Base.metadata.create_all` — which **never alters an existing table.** Adding the column
+  therefore needs an idempotent `ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_path`
+  in `init_db()` (same "dev convenience, real migrations later" spirit as the rest).
+- Keep parsing + scaffolding as **pure functions** (text→data, data→text, and a
+  base-path-injected FS writer) so they are testable **without Postgres**. Only the
+  orchestrator touches the repository layer.
+- **No test suite exists yet** — onboarding is where `pytest` enters the repo.
+
 ## How to build this (intent & guidance)
 
 - **Builder:** a **senior software engineer learning agentic AI in practice.** Trackden
@@ -158,9 +232,8 @@ behind the tool, so routing can't go wrong and stays agnostic. Tool descriptions
 ## Open questions / later
 
 - ✅ **STORAGE MODEL — DECIDED** (hybrid; see "LOCKED DESIGN" section above).
-- **Onboarding / configure a project (#2) — design next:** `trackden onboard` scaffolds
-  the per-project wrapper folder (vendor-neutral guidance files) + creates the DB project.
-  Build on the locked storage model.
+- ✅ **ONBOARDING (#2) — DECIDED** (see "LOCKED DESIGN — Onboarding (`trackden onboard`)"
+  above). Implementation plan: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`.
 - **Standup / summary reports (#7) — design next:** on-request summary across items — via
   the agent (MCP, keyless) or the optional brain (with key). Notes stored as a DB log
   and/or written to a guidance/report file.

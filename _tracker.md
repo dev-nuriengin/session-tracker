@@ -29,6 +29,38 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
+### ✅ RESOLVED — `trackden onboard` design (approved 2026-07-28)
+
+**Approved.** Name confirmed **Trackden** (no rename to "Trackerden"). The design is now
+written down in two places, so it no longer lives in this scratch block:
+
+- **Spec:** `BUILD_NOTES.md` → "LOCKED DESIGN — Onboarding (`trackden onboard`)".
+- **Implementation plan:** `docs/superpowers/plans/2026-07-28-trackden-onboard.md`
+  (8 tasks, TDD, bite-sized).
+
+**▸ NEXT: execute that plan, Task 1 first.** Two findings the plan already accounts for:
+`projects` has no `repo_path` and `init_db` only does `create_all` (which never ALTERs an
+existing table), and the repo has **no test suite yet** — onboarding is where pytest lands.
+
+**Context that led here (all DECIDED & already in code/docs):**
+- Product renamed **Session Tracker → Trackden** (CLI `sess`→`trackden`, MCP `session-tracker`→`trackden`). Committed & pushed (`7b0a068`).
+- **FIRST principle: LLM-agnostic** — MCP is the one contract; vendor-neutral file names; per-vendor files are shims.
+- **Hybrid storage — LOCKED** (see BUILD_NOTES "LOCKED DESIGN"): DB owns *state*; vendor-neutral *files* own guidance; pgvector = derived index. Routing = **tool is the destination** (LLM never picks storage). Backup = files→git, DB→`pg_dump` + `trackden export`.
+
+**Onboarding decisions locked in this session (NOT yet written to BUILD_NOTES):**
+1. **Wrapper home = CENTRAL** — `~/.trackden/projects/<slug>/` (repos stay untouched; guidance reached via MCP only; `~/.trackden` = one git repo for backup).
+2. **UX = interactive wizard (default) + flags** — captures name/slug/kind/**repo_path**/folders/items.
+3. **Import = auto-detect & import** — scan repo (`**/_tracker.md`, `main-plans/_tracker.md`, `_tickets-and-status/_tracker.md`, `CLAUDE.md`, `AGENTS.md`), parse checkbox lists, **review gate before writing**, fallback to fresh scaffold.
+
+**Full drafted design (the thing to write into BUILD_NOTES on approval):**
+- Command: `trackden onboard` (wizard) / `trackden onboard <slug> --name --kind --repo --no-import`.
+- Steps: identify → scan+import (with y/n/edit gate) → create DB project (+`repo_path`) → scaffold central guidance → summary.
+- Scaffold: `~/.trackden/projects/<slug>/` → `_way-of-work.md` (seeded from repo CLAUDE.md if found), `_arch.md`, `_decisions.md`, `_tracker.md` (**generated mirror** of DB, not hand-edited).
+- Data: DB = project(slug,name,kind,client,repo_path) + imported items/status; Files = way-of-work/arch/decisions; `_tracker.md` = derived.
+- **Deferred (flagged, not designed):** (a) auto-trigger "call MCP first" needs a **launcher/alias** (repos untouched → no in-repo shim); onboard can *offer* an alias snippet. (b) agent-driven onboard via MCP tool — CLI-first now.
+
+---
+
 **Status:** 26 / 28 — **ALL CORE PHASES DONE (0–10).** The 2 open items are
 explicitly-deferred future refinements: Phase 7 optional cloud store, Phase 8 hybrid+rerank.
 
