@@ -66,7 +66,10 @@ restart so it loads). Your agent now has these tools:
 | Tool | What it does |
 |---|---|
 | `list_projects` | cheap overview of everything you track |
-| `get_history` | pull an item's history **first** — never start blind |
+| `overview` | call this FIRST for a project — compact summary, not a full dump |
+| `get_history` | pull a project's history **first when resuming** — never start blind |
+| `list_items` | drill-down: a project's items (open only unless asked for done too) |
+| `list_memory` | drill-down: a project's durable memory (decisions, links, notes) |
 | `whats_next` | suggested next steps |
 | `save_progress` | capture what was done, behind the scenes |
 | `add_memory` | store a decision / repo link / note |

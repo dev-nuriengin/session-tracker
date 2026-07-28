@@ -44,6 +44,14 @@ def list_memory(project: str) -> list[dict]:
 
 
 @mcp.tool()
+def get_history(project: str, limit: int = 10) -> dict:
+    """Use AFTER overview, when you are RESUMING work and need the full continuity
+    payload in one call: open items + memory + the last `limit` session logs. Heavier
+    than overview — call it when you need the whole picture, not just a status check."""
+    return repository.get_history(project, limit=limit)
+
+
+@mcp.tool()
 def search(query: str, limit: int = 5) -> list[dict]:
     """Semantic search across ALL projects' session logs (RAG). Use this to answer
     "have I done/seen X before?" across your whole history, not just one project."""
