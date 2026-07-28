@@ -1,3 +1,8 @@
+import subprocess
+from unittest import mock
+
+import pytest
+
 from app.workspace import ensure_home_git, project_dir, scaffold_project, trackden_home
 
 
@@ -52,3 +57,55 @@ def test_ensure_home_git_initialises_the_workspace_repo(home):
 def test_ensure_home_git_is_idempotent(home):
     ensure_home_git()
     assert ensure_home_git() is True
+
+
+# Slug validation — project_dir guards against path escapes
+def test_project_dir_rejects_absolute_slug(home):
+    with pytest.raises(ValueError):
+        project_dir("/tmp/evil")
+
+
+def test_project_dir_rejects_dotdot_slug(home):
+    with pytest.raises(ValueError):
+        project_dir("../../outside")
+
+
+def test_project_dir_rejects_slug_with_forward_slash(home):
+    with pytest.raises(ValueError):
+        project_dir("foo/bar")
+
+
+def test_project_dir_rejects_slug_with_backslash(home):
+    with pytest.raises(ValueError):
+        project_dir("foo\\bar")
+
+
+def test_project_dir_rejects_empty_slug(home):
+    with pytest.raises(ValueError):
+        project_dir("")
+
+
+def test_project_dir_safe_slug_resolves_correctly(home):
+    assert project_dir("my-proj") == home / "projects" / "my-proj"
+
+
+def test_scaffold_with_unsafe_slug_raises_and_writes_nothing(home):
+    with pytest.raises(ValueError):
+        scaffold_project("../escape")
+    # Verify nothing was written to the workspace
+    projects_dir = home / "projects"
+    assert not projects_dir.exists() or list(projects_dir.iterdir()) == []
+
+
+# Git unavailable — ensure_home_git gracefully returns False
+def test_ensure_home_git_returns_false_when_git_binary_missing(home):
+    with mock.patch("subprocess.run", side_effect=FileNotFoundError("git not found")):
+        assert ensure_home_git() is False
+
+
+def test_ensure_home_git_returns_false_when_git_command_fails(home):
+    with mock.patch(
+        "subprocess.run",
+        side_effect=subprocess.CalledProcessError(1, "git init"),
+    ):
+        assert ensure_home_git() is False

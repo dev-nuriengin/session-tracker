@@ -61,6 +61,31 @@ def trackden_home() -> Path:
 
 
 def project_dir(slug: str, home: Path | None = None) -> Path:
+    """Resolve a project's guidance folder. Validates the slug to prevent path escapes.
+
+    This module owns the "never write outside the workspace" promise. A caller
+    bypassing the CLI (e.g., an agent-driven onboarding path) must not be able to
+    break it. Path-traversal attempts are caught here rather than silently sanitised.
+
+    Raises ValueError if the slug is empty, absolute, contains path separators, or
+    contains `..` segments.
+    """
+    # Reject empty slug
+    if not slug:
+        raise ValueError("Slug cannot be empty")
+
+    # Reject absolute slug (would discard home via Path.__truediv__ semantics)
+    if slug.startswith("/"):
+        raise ValueError(f"Slug must not be absolute: {slug}")
+
+    # Reject path separators that could escape or confuse the workspace
+    if "/" in slug or "\\" in slug:
+        raise ValueError(f"Slug must not contain path separators: {slug}")
+
+    # Reject .. traversal attempts
+    if ".." in slug:
+        raise ValueError(f"Slug must not contain .. segments: {slug}")
+
     return (home or trackden_home()) / "projects" / slug
 
 
