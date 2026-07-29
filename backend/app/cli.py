@@ -6,8 +6,11 @@ doors. Data is read from / written to the local Postgres, never a hardcoded list
 Run:  `uv run trackden <command>`   (or `uv run python -m app.cli <command>`)
 """
 
+from pathlib import Path
+
 import typer
 
+from . import onboard as onboard_mod
 from . import repository
 
 app = typer.Typer(
@@ -150,6 +153,92 @@ def log(
     """Save session progress (a step/note) for a project."""
     ok = repository.add_session_log(project, thread, note, kind)
     typer.echo("✓ logged" if ok else f"unknown project '{project}'")
+
+
+_GATE_PREVIEW = 10  # show at most this many items before asking
+
+
+def _review_gate(hit: onboard_mod.ScanHit) -> list[onboard_mod.ParsedItem] | None:
+    """Interactive review gate — nothing is imported without a yes.
+
+    y    → import everything found in this file
+    n    → skip this file
+    edit → pick which numbered items to import
+    """
+    items = list(hit.parsed.items)
+    typer.echo(f"\nFound {len(items)} items in {hit.relpath}")
+    for number, item in enumerate(items[:_GATE_PREVIEW], 1):
+        typer.echo(f"   {number:>2}. [{item.status}] {item.title}")
+    if len(items) > _GATE_PREVIEW:
+        typer.echo(f"   … and {len(items) - _GATE_PREVIEW} more")
+
+    answer = typer.prompt("Import? (y / n / edit)", default="y").strip().lower()
+    if answer.startswith("n"):
+        typer.echo("  skipped")
+        return None
+    if answer.startswith("e"):
+        picked = typer.prompt(
+            "Numbers to import (comma-separated, blank = all)", default=""
+        )
+        wanted = {int(part) for part in picked.replace(" ", "").split(",") if part.isdigit()}
+        if wanted:
+            return [item for number, item in enumerate(items, 1) if number in wanted]
+    return items
+
+
+@app.command()
+def onboard(
+    slug: str = typer.Argument(None, help="Project slug (omit for the interactive wizard)"),
+    name: str = typer.Option(None, help="Display name"),
+    kind: str = typer.Option("personal", help="personal | client"),
+    client: str = typer.Option(None, help="Client name (for client projects)"),
+    repo: str = typer.Option(None, help="Repo path to scan (default: the current directory)"),
+    no_import: bool = typer.Option(False, "--no-import", help="Skip auto-detect entirely"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Import everything found, no prompts"),
+):
+    """Bring a project into Trackden: import what exists, scaffold the rest.
+
+    Reads the repo (never writes to it), asks before importing anything, then creates
+    the project in the DB and its guidance folder under ~/.trackden.
+    """
+    wizard = slug is None
+    if wizard:
+        name = name or typer.prompt("Project name")
+        slug = typer.prompt("Slug", default=onboard_mod.slugify(name))
+        kind = typer.prompt("Kind (personal | client)", default=kind)
+        if kind == "client" and not client:
+            client = typer.prompt("Client name", default="") or None
+        repo = repo or typer.prompt("Repo path to scan", default=str(Path.cwd()))
+
+    if repo is None and not no_import:
+        cwd = Path.cwd()
+        repo = str(cwd) if (cwd / ".git").exists() else None
+
+    try:
+        result = onboard_mod.run_onboard(
+            slug=slug,
+            name=name,
+            kind=kind,
+            client=client,
+            repo=repo,
+            import_items=not no_import,
+            confirm=None if yes else _review_gate,
+        )
+    except ValueError as exc:
+        typer.echo(f"cannot onboard: {exc}")
+        raise typer.Exit(1)
+
+    typer.echo("")
+    typer.echo(f"✓ project '{result.slug}' — {'created' if result.created else 'already existed, updated'}")
+    typer.echo(f"  items imported : {result.imported}" + (
+        f"  (from {', '.join(result.sources)})" if result.sources else ""
+    ))
+    typer.echo("  guidance       :")
+    for path in result.files:
+        typer.echo(f"      • {path}")
+    if not result.git_ready:
+        typer.echo("  ⚠ workspace is not a git repo (git unavailable) — guidance is unversioned")
+    typer.echo(f"\nNext:  trackden show {result.slug}")
 
 
 if __name__ == "__main__":
