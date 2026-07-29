@@ -234,10 +234,22 @@ def add_item(slug: str, title: str, folder_id: int | None = None) -> int | None:
         return item.id
 
 
-# ---- durable memory (decisions, links, notes) ----
+# ---- durable memory (links, notes, transcripts) ----
+
+# Decisions deliberately absent: they belong in the project's `_decisions.md`, not the
+# DB. The storage model routes by intent — the tool IS the destination — so accepting
+# a decision here as well would give an agent two homes for one datum.
+MEMORY_KINDS = frozenset({"link", "note", "transcript"})
+
 
 def add_memory(slug: str, content: str, kind: str = "note", title: str | None = None,
                url: str | None = None) -> bool:
+    if kind not in MEMORY_KINDS:
+        hint = " — use `add_decision`, which writes to the project's `_decisions.md`" if kind == "decision" else ""
+        raise ValueError(
+            f"unsupported memory kind {kind!r}; expected one of "
+            f"{', '.join(sorted(MEMORY_KINDS))}{hint}"
+        )
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:

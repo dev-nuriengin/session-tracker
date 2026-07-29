@@ -2,7 +2,7 @@
 
     projects → folders (nestable) → items          (the work map)
     projects → sessions → session_logs             (what happened, per session)
-    projects → memory                              (durable facts: decisions, links, notes)
+    projects → memory                              (durable facts: links, notes)
 
 This is Trackden's single source of truth. All doors (MCP, CLI, web) read
 and write these tables; nothing lives in local files. Terminology is
@@ -132,9 +132,11 @@ class SessionLog(Base):
 
 
 class Memory(Base):
-    """Durable, concrete memory for a project — decisions, repo links, notes,
-    meeting/decision transcripts. This is what gives agents continuity across
-    sessions. Optionally scoped to a folder or item."""
+    """Durable, concrete memory for a project — repo links, notes, meeting transcripts.
+
+    Decisions are NOT here: they live in the project's `_decisions.md` guidance file
+    (see `guidance.add_decision`), so each datum has exactly one home. Optionally
+    scoped to a folder or item."""
 
     __tablename__ = "memory"
 
@@ -142,7 +144,7 @@ class Memory(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
     folder_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id"), nullable=True)
     item_id: Mapped[int | None] = mapped_column(ForeignKey("tracking_items.id"), nullable=True)
-    kind: Mapped[str] = mapped_column(String(20), default="note")  # decision | link | note | transcript
+    kind: Mapped[str] = mapped_column(String(20), default="note")  # link | note | transcript
     title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     content: Mapped[str] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # e.g. GitLab/GitHub link

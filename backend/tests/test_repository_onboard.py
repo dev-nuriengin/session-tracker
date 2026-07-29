@@ -111,3 +111,25 @@ def test_import_items_reuses_a_folder_created_out_of_band(temp_slug):
 
     assert len(folders) == 1
     assert folders[0].id == existing_id
+
+
+@pytest.mark.db
+def test_add_memory_rejects_the_decision_kind(temp_slug):
+    repository.create_project(temp_slug)
+    with pytest.raises(ValueError) as excinfo:
+        repository.add_memory(temp_slug, "we chose X", kind="decision")
+    assert "add_decision" in str(excinfo.value)
+
+
+@pytest.mark.db
+def test_add_memory_still_accepts_its_remaining_kinds(temp_slug):
+    repository.create_project(temp_slug)
+    for kind in ("link", "note", "transcript"):
+        assert repository.add_memory(temp_slug, f"a {kind}", kind=kind) is True
+
+
+@pytest.mark.db
+def test_add_memory_rejects_an_unknown_kind(temp_slug):
+    repository.create_project(temp_slug)
+    with pytest.raises(ValueError):
+        repository.add_memory(temp_slug, "x", kind="nonsense")
