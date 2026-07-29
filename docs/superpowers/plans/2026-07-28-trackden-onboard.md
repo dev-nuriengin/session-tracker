@@ -430,6 +430,26 @@ git commit -m "feat(onboard): render the generated _tracker.md mirror from DB it
   - `workspace.scaffold_project(slug: str, *, name: str | None = None, way_of_work: str | None = None, tracker_md: str = "", home: Path | None = None) -> list[Path]`
   - `workspace.ensure_home_git(home: Path | None = None) -> bool`
 
+> **Amendment (2026-07-28, after review).** As first written, this task's `project_dir`
+> had no slug validation, which contradicted its own global constraint *"only ever writes
+> under the workspace root"*. Review reproduced two escapes on disk: a `..` slug resolved
+> outside the root, and an **absolute** slug made `Path.__truediv__` discard `home`
+> entirely — `project_dir("/tmp/evil")` returned exactly `Path("/tmp/evil")`, so
+> `scaffold_project` would write guidance files there. Ruling: **guard in this module and
+> raise `ValueError`** — not silent sanitising, and not relying on Task 5's `slugify`,
+> because this module owns the invariant and the deferred agent-driven onboard bypasses
+> the CLI. The `project_dir` code in Step 3 below reflects the shipped guard.
+>
+> Step 1's test list gained: absolute slug raises · `..` slug raises · separator slug
+> raises · empty slug raises · a normal slug still resolves · `scaffold_project` with an
+> unsafe slug **writes nothing** · `ensure_home_git` returns `False` when `subprocess.run`
+> raises `FileNotFoundError` · and the same for `CalledProcessError`.
+>
+> Known residual, accepted as sub-Minor: a bare-dot slug `"."` passes all four checks and
+> `pathlib` collapses it, so files land in the shared `projects/` dir — inside the
+> workspace root, so no boundary escape, but per-project isolation breaks. Windows-only:
+> a drive-relative slug (`"D:evil"`) has no separator and would discard the base.
+
 - [ ] **Step 1: Write the failing workspace tests**
 
 Create `backend/tests/test_workspace.py`:
@@ -564,6 +584,23 @@ def trackden_home() -> Path:
 
 
 def project_dir(slug: str, home: Path | None = None) -> Path:
+    """Resolve a project's guidance folder. Validates the slug to prevent path escapes.
+
+    This module owns the "never write outside the workspace" promise. A caller
+    bypassing the CLI (e.g., an agent-driven onboarding path) must not be able to
+    break it. Path-traversal attempts are caught here rather than silently sanitised.
+
+    Raises ValueError if the slug is empty, absolute, contains path separators, or
+    contains `..` segments.
+    """
+    if not slug:
+        raise ValueError("Slug cannot be empty")
+    if slug.startswith("/"):
+        raise ValueError(f"Slug must not be absolute: {slug}")
+    if "/" in slug or "\\" in slug:
+        raise ValueError(f"Slug must not contain path separators: {slug}")
+    if ".." in slug:
+        raise ValueError(f"Slug must not contain .. segments: {slug}")
     return (home or trackden_home()) / "projects" / slug
 
 
@@ -1169,6 +1206,22 @@ git commit -m "feat(onboard): read-only repo scan for tracker and guidance files
   - `onboard.OnboardResult` — dataclass with `slug: str`, `name: str`, `created: bool`, `imported: int`, `sources: list[str]`, `files: list[Path]`, `git_ready: bool`
   - `onboard.run_onboard(*, slug: str, name: str | None = None, kind: str = "personal", client: str | None = None, repo: Path | str | None = None, import_items: bool = True, confirm: Confirm | None = None, home: Path | None = None) -> OnboardResult`
 
+> **Amendment (2026-07-28, after Task 4's review).** As first written this task called
+> `repository.import_items` whenever the scan produced items, which contradicted its own
+> docstring claim *"re-running is safe"*: `import_items` dedupes folder names only within
+> a single call, so a second `trackden onboard` of the same repo would duplicate every
+> item **and** every folder. The plan's original two-onboard test missed it because its
+> first call passed `repo=None`, so no import happened.
+>
+> Ruling: **import only when the project is newly created.** A re-run still refreshes
+> `repo_path`, regenerates the `_tracker.md` mirror, and preserves guidance files — it
+> just imports nothing. This matches the locked storage model: once onboarded, the DB owns
+> item state, and new items arrive via the CLI or an MCP tool rather than by re-scanning
+> the repo. Considered and rejected: making `import_items` idempotent by treating item
+> title as an identity key, which would silently re-import any renamed item.
+>
+> Step 1's test list gained `test_onboard_does_not_reimport_items_when_the_project_already_exists`.
+
 - [ ] **Step 1: Write the failing orchestrator tests**
 
 Append to `backend/tests/test_onboard.py`:
@@ -1281,6 +1334,16 @@ def test_onboard_updates_repo_path_when_the_project_already_exists(home, fake_db
     assert fake_db["repo_paths"]["p"] == str(Path(fake_repo).resolve())
 
 
+def test_onboard_does_not_reimport_items_when_the_project_already_exists(home, fake_db, fake_repo):
+    run_onboard(slug="p", repo=fake_repo)
+    after_first = len(fake_db["items"])
+    assert after_first == 3
+    result = run_onboard(slug="p", repo=fake_repo)
+    assert result.created is False
+    assert result.imported == 0
+    assert len(fake_db["items"]) == after_first  # no duplicate items or folders
+
+
 def test_onboard_initialises_the_workspace_git_repo(home, fake_db):
     assert run_onboard(slug="p").git_ready is True
     assert (home / ".git").exists()
@@ -1336,8 +1399,9 @@ def run_onboard(
     """Identify → scan → gate → DB → scaffold → summarise.
 
     Writes only to the DB and the central workspace. The repo is read, never written.
-    Re-running is safe: an existing project keeps its guidance files and simply has
-    its `repo_path` refreshed and its `_tracker.md` mirror regenerated.
+    Re-running is safe: an existing project keeps its guidance files, has its
+    `repo_path` refreshed and its `_tracker.md` mirror regenerated, and imports
+    nothing — items are only ever imported when the project is first created.
     """
     slug = slugify(slug)
     display = name or slug
@@ -1364,8 +1428,12 @@ def run_onboard(
     if not created and repo_path:
         repository.set_repo_path(slug, repo_path)
 
+    # Items are imported ONLY on first onboard. `import_items` dedupes folder names
+    # within a single call but not against rows already in the DB, so re-importing
+    # would duplicate both items and folders. After onboarding the DB owns item
+    # state — new items arrive via the CLI or an MCP tool, not by re-scanning.
     imported = 0
-    if chosen:
+    if chosen and created:
         imported = repository.import_items(slug, [
             {"title": item.title, "status": item.status, "folder": item.folder}
             for item in chosen
