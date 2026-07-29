@@ -23,12 +23,14 @@ def test_get_reports_unknown_project(home, known_project):
     result = get("nope")
     assert result["status"] == "unknown_project"
     assert result["text"] is None
+    assert result["message"]
 
 
 def test_get_reports_not_scaffolded(home, known_project):
     result = get("p")
     assert result["status"] == "not_scaffolded"
     assert result["text"] is None
+    assert "trackden onboard p" in result["message"]
 
 
 def test_get_reports_template_for_untouched_scaffolding(home, known_project):
@@ -36,6 +38,7 @@ def test_get_reports_template_for_untouched_scaffolding(home, known_project):
     result = get("p", "arch")
     assert result["status"] == "template"
     assert "Architecture — P" in result["text"]
+    assert result["message"] == ""
 
 
 def test_get_reports_filled_once_edited(home, known_project):
@@ -45,6 +48,7 @@ def test_get_reports_filled_once_edited(home, known_project):
     result = get("p", "arch")
     assert result["status"] == "filled"
     assert "real content" in result["text"]
+    assert result["message"] == ""
 
 
 def test_get_defaults_to_way_of_work(home, known_project):
@@ -55,7 +59,8 @@ def test_get_defaults_to_way_of_work(home, known_project):
 def test_get_reports_unknown_doc_without_raising(home, known_project):
     result = get("p", "not-a-doc")
     assert result["status"] == "unknown_doc"
-    assert "way-of-work" in result["text"]
+    assert result["text"] is None
+    assert "way-of-work" in result["message"]
 
 
 def test_get_reports_the_path_when_it_has_one(home, known_project):
@@ -64,17 +69,22 @@ def test_get_reports_the_path_when_it_has_one(home, known_project):
 
 
 def test_add_decision_reports_unknown_project(home, known_project):
-    assert add_decision("nope", "d", "b")["status"] == "unknown_project"
+    result = add_decision("nope", "d", "b")
+    assert result["status"] == "unknown_project"
+    assert result["message"]
 
 
 def test_add_decision_reports_not_scaffolded(home, known_project):
-    assert add_decision("p", "d", "b")["status"] == "not_scaffolded"
+    result = add_decision("p", "d", "b")
+    assert result["status"] == "not_scaffolded"
+    assert "trackden onboard p" in result["message"]
 
 
 def test_add_decision_appends_and_reports_appended(home, known_project):
     scaffold_project("p", name="P")
     result = add_decision("p", "Use fastembed", "keeps the core keyless")
     assert result["status"] == "appended"
+    assert result["message"] == ""
     assert "Use fastembed" in guidance_path("p", "decisions").read_text()
 
 
