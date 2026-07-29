@@ -135,8 +135,11 @@ def run_onboard(
 
     Writes only to the DB and the central workspace. The repo is read, never written.
     Re-running is safe: an existing project keeps its guidance files, has its
-    `repo_path` refreshed and its `_tracker.md` mirror regenerated, and imports
-    nothing — items are only ever imported when the project is first created.
+    `repo_path` refreshed and its `_tracker.md` mirror regenerated. Items import only
+    while the project is itemless — a first onboard, or one where every file was
+    declined (or the run was interrupted) — never once it already holds items. There
+    is no `delete` command, so a declined/interrupted run must not lock a project out
+    of ever importing; it just gets offered the same gate again next time.
     """
     slug = slugify(slug)
     if not slug:
@@ -147,13 +150,17 @@ def run_onboard(
     display = name or slug
     repo_path = str(Path(repo).expanduser().resolve()) if repo else None
 
-    # `created` must be known before the scan/gate loop below: only a first onboard
-    # imports anything, so only a first onboard may prompt for it.
     created = repository.create_project(
         slug, name=display, kind=kind, client=client, repo_path=repo_path
     )
     if not created and repo_path:
         repository.set_repo_path(slug, repo_path)
+
+    # Whether to import is a question about the project's DB state, not its
+    # just-created-ness: a newly created project is always itemless (this is
+    # `[]`), and a project where a prior onboard was declined/interrupted on every
+    # file is itemless too — both must still be offered the gate.
+    has_items = bool(repository.items_with_folders(slug))
 
     hits = scan_repo(repo) if (repo_path and import_items) else []
 
@@ -162,26 +169,27 @@ def run_onboard(
     way_of_work: str | None = None
     for hit in hits:
         # Seeding way-of-work costs nothing and the scan is read-only either way, so
-        # this still runs on a re-run — an empty placeholder (e.g. a CLAUDE.md the
-        # user hasn't filled in) doesn't count as "seeded" and must not block a later,
-        # populated guidance file from doing so.
+        # this still runs regardless of item state — an empty placeholder (e.g. a
+        # CLAUDE.md the user hasn't filled in) doesn't count as "seeded" and must
+        # not block a later, populated guidance file from doing so.
         if hit.is_guidance and not way_of_work:
             way_of_work = hit.text
-        # A re-run must not re-prompt: `chosen`/`sources` — and the gate itself —
-        # only run when this onboard is the one that created the project.
-        if not created or not hit.parsed.items:
+        # The gate — and any import it feeds — only ever runs while the project
+        # has no items yet. Once it has items, new ones arrive via the CLI or an
+        # MCP tool, not by re-scanning.
+        if has_items or not hit.parsed.items:
             continue
         selected = list(hit.parsed.items) if confirm is None else confirm(hit)
         if selected:
             chosen.extend(selected)
             sources.append(hit.relpath)
 
-    # Items are imported ONLY on first onboard. `import_items` dedupes folder names
-    # within a single call but not against rows already in the DB, so re-importing
-    # would duplicate both items and folders. After onboarding the DB owns item
-    # state — new items arrive via the CLI or an MCP tool, not by re-scanning.
+    # Items are imported ONLY while the project is itemless. `import_items` dedupes
+    # folder names within a single call but not against rows already in the DB, so
+    # importing into a project that already has items would duplicate both items
+    # and folders.
     imported = 0
-    if chosen and created:
+    if chosen and not has_items:
         imported = repository.import_items(slug, [
             {"title": item.title, "status": item.status, "folder": item.folder}
             for item in chosen

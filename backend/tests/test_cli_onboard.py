@@ -16,6 +16,15 @@ def fake_repo_with_items(tmp_path):
 
 
 @pytest.fixture
+def fake_repo_with_three_items(tmp_path):
+    (tmp_path / "_tracker.md").write_text(
+        "## Phase 0\n- [ ] first thing\n- [ ] second thing\n- [ ] third thing\n",
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+@pytest.fixture
 def fake_db(monkeypatch):
     state = {"projects": set(), "items": []}
 
@@ -72,6 +81,65 @@ def test_onboard_review_gate_can_edit_the_selection(home, fake_db, fake_repo_wit
     )
     assert result.exit_code == 0, result.output
     assert [item["title"] for item in fake_db["items"]] == ["open thing"]
+
+
+def test_onboard_review_gate_edit_selects_multiple_items(home, fake_db, fake_repo_with_three_items):
+    result = runner.invoke(
+        app,
+        ["onboard", "my-proj", "--repo", str(fake_repo_with_three_items)],
+        input="edit\n1,3\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert [item["title"] for item in fake_db["items"]] == ["first thing", "third thing"]
+
+
+def test_onboard_review_gate_edit_blank_selection_imports_all(home, fake_db, fake_repo_with_items):
+    result = runner.invoke(
+        app,
+        ["onboard", "my-proj", "--repo", str(fake_repo_with_items)],
+        input="edit\n\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert len(fake_db["items"]) == 2
+
+
+def test_onboard_review_gate_edit_with_junk_number_skips_the_file(home, fake_db, fake_repo_with_items):
+    """Non-numeric input at the edit prompt must NOT fall through to "import
+    everything" — that is the opposite of what a user choosing `edit` asked for."""
+    result = runner.invoke(
+        app,
+        ["onboard", "my-proj", "--repo", str(fake_repo_with_items)],
+        input="edit\nabc\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert fake_db["items"] == []
+    assert "not a valid item number" in result.output
+
+
+def test_onboard_review_gate_edit_with_out_of_range_number_skips_the_file(
+    home, fake_db, fake_repo_with_items
+):
+    result = runner.invoke(
+        app,
+        ["onboard", "my-proj", "--repo", str(fake_repo_with_items)],
+        input="edit\n99\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert fake_db["items"] == []
+    assert "not a valid item number" in result.output
+
+
+def test_onboard_review_gate_unrecognised_answer_skips_the_file(home, fake_db, fake_repo_with_items):
+    """Any top-level answer that isn't y/n/edit must skip the file, not silently
+    import everything — the gate always errs toward NOT importing."""
+    result = runner.invoke(
+        app,
+        ["onboard", "my-proj", "--repo", str(fake_repo_with_items)],
+        input="maybe\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert fake_db["items"] == []
+    assert "not understood" in result.output
 
 
 def test_onboard_no_import_skips_the_scan(home, fake_db, fake_repo_with_items):

@@ -189,11 +189,19 @@ def test_onboard_does_not_reimport_items_when_the_project_already_exists(home, f
     run_onboard(slug="p", repo=fake_repo)
     after_first = len(fake_db["items"])
     assert after_first == 3
-    result = run_onboard(slug="p", repo=fake_repo)
+
+    calls = []
+
+    def spy(hit):
+        calls.append(hit)
+        return list(hit.parsed.items)
+
+    result = run_onboard(slug="p", repo=fake_repo, confirm=spy)
     assert result.created is False
     assert result.imported == 0
     assert result.sources == []  # nothing was imported, so nothing sourced it
     assert len(fake_db["items"]) == after_first  # no duplicate items or folders
+    assert calls == []  # the gate must not run once the project already has items
 
 
 def test_onboard_does_not_call_the_gate_on_a_re_run(home, fake_db, fake_repo):
@@ -209,6 +217,42 @@ def test_onboard_does_not_call_the_gate_on_a_re_run(home, fake_db, fake_repo):
 
     run_onboard(slug="p", repo=fake_repo, confirm=spy)
     assert len(calls) == after_first  # no new invocations — the gate did not run again
+
+
+def test_onboard_offers_the_gate_again_after_every_file_was_declined(home, fake_db, fake_repo):
+    """A declined (or interrupted) first onboard must leave the project itemless,
+    so it is NOT locked out of ever importing — there is no `delete` command, so a
+    re-run is the only way back in."""
+    calls = []
+
+    def decline_everything(hit):
+        calls.append(hit)
+        return None
+
+    first = run_onboard(slug="p", repo=fake_repo, confirm=decline_everything)
+    assert first.imported == 0
+    assert len(calls) > 0  # the gate did run on the (declined) first onboard
+
+    calls.clear()
+
+    def accept_everything(hit):
+        calls.append(hit)
+        return list(hit.parsed.items)
+
+    second = run_onboard(slug="p", repo=fake_repo, confirm=accept_everything)
+    assert len(calls) > 0  # the gate runs AGAIN — nothing was imported last time
+    assert second.imported == 3  # everything now imports
+    assert sorted(second.sources) == ["_tracker.md", "main-plans/_tracker.md"]
+
+
+def test_onboard_no_import_flag_never_calls_scan_repo(home, fake_db, fake_repo, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        onboard_mod, "scan_repo", lambda repo, *a, **kw: calls.append(repo) or []
+    )
+    result = run_onboard(slug="p", repo=fake_repo, import_items=False)
+    assert result.imported == 0
+    assert calls == []  # the scan never even ran
 
 
 def test_onboard_initialises_the_workspace_git_repo(home, fake_db):

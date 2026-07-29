@@ -158,12 +158,21 @@ def log(
 _GATE_PREVIEW = 10  # show at most this many items before asking
 
 
+def _prompt_matches(answer: str, word: str) -> bool:
+    """Is `answer` a (non-empty) prefix of `word`? — lets "y"/"ye"/"yes" all count."""
+    return bool(answer) and word.startswith(answer)
+
+
 def _review_gate(hit: onboard_mod.ScanHit) -> list[onboard_mod.ParsedItem] | None:
     """Interactive review gate — nothing is imported without a yes.
 
-    y    → import everything found in this file
+    y    → import everything found in this file (also what a blank answer means)
     n    → skip this file
-    edit → pick which numbered items to import
+    edit → pick which numbered items to import (blank = all)
+
+    The gate always errs toward NOT importing: an answer that isn't y/n/edit, or an
+    `edit` selection containing so much as one unparseable or out-of-range number,
+    skips the whole file rather than guessing at what the user meant.
     """
     items = list(hit.parsed.items)
     typer.echo(f"\nFound {len(items)} items in {hit.relpath}")
@@ -173,17 +182,37 @@ def _review_gate(hit: onboard_mod.ScanHit) -> list[onboard_mod.ParsedItem] | Non
         typer.echo(f"   … and {len(items) - _GATE_PREVIEW} more")
 
     answer = typer.prompt("Import? (y / n / edit)", default="y").strip().lower()
-    if answer.startswith("n"):
+
+    if not answer or _prompt_matches(answer, "yes"):
+        return items
+
+    if _prompt_matches(answer, "no"):
         typer.echo("  skipped")
         return None
-    if answer.startswith("e"):
+
+    if _prompt_matches(answer, "edit"):
         picked = typer.prompt(
             "Numbers to import (comma-separated, blank = all)", default=""
-        )
-        wanted = {int(part) for part in picked.replace(" ", "").split(",") if part.isdigit()}
-        if wanted:
-            return [item for number, item in enumerate(items, 1) if number in wanted]
-    return items
+        ).strip()
+        if not picked:
+            return items
+        valid: list[int] = []
+        invalid: list[str] = []
+        for token in (part.strip() for part in picked.split(",")):
+            if token.isdigit() and 1 <= int(token) <= len(items):
+                valid.append(int(token))
+            else:
+                invalid.append(token)
+        if invalid:
+            typer.echo(
+                f"  not a valid item number: {', '.join(invalid)} — skipping this file"
+            )
+            return None
+        wanted = set(valid)
+        return [item for number, item in enumerate(items, 1) if number in wanted]
+
+    typer.echo(f"  '{answer}' not understood — skipping this file")
+    return None
 
 
 @app.command()
