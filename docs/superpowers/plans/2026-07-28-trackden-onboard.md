@@ -1017,6 +1017,13 @@ def test_slugify(raw, expected):
 
 @pytest.fixture
 def fake_repo(tmp_path):
+    # Its own subdirectory, not `tmp_path` itself — so it is a SIBLING of the
+    # `~/.trackden` workspace the `home` fixture points at (also under `tmp_path`),
+    # never an ancestor of it. Onboarding writes to the workspace; Task 6's
+    # repo-unchanged test scans the repo root and must not see the workspace's own
+    # files as if they were changes to the repo.
+    tmp_path = tmp_path / "repo"
+    tmp_path.mkdir()
     (tmp_path / "_tracker.md").write_text(
         "## Phase 0\n- [x] done thing\n- [ ] open thing\n", encoding="utf-8"
     )
@@ -1221,6 +1228,26 @@ git commit -m "feat(onboard): read-only repo scan for tracker and guidance files
 > title as an identity key, which would silently re-import any renamed item.
 >
 > Step 1's test list gained `test_onboard_does_not_reimport_items_when_the_project_already_exists`.
+
+> **Amendment 2 (2026-07-29, found by the controller's live smoke test) — supersedes the
+> created-only rule above.** Running the real command and declining the gate with `n`
+> revealed the trap: the project is created with 0 items, and because import was gated on
+> `created`, a re-run never offered those items again. With no `trackden delete` command,
+> that project could never receive its items through onboarding. Reachable by ordinary use
+> ("let me look first"), not only by a `KeyboardInterrupt` at the prompt — which the earlier
+> reordering had also exposed, since `create_project` now commits before the gate runs.
+>
+> Ruling: **import when the project has no items yet**, determined from the read-only
+> `repository.items_with_folders(slug)`. A newly created project returns `[]`, so this
+> subsumes the new-project case; a declined or interrupted onboard is offered again; a
+> project that already holds items is still skipped, because the DB owns item state once
+> onboarded. This condition replaces `created` in both places it gated import behavior —
+> the per-hit loop guard around `confirm`, and the final import condition.
+>
+> Everything else from Amendment 1 stands: the scan stays gated on
+> `repo_path and import_items` so `--no-import` skips it entirely, `way_of_work` still seeds
+> from the first guidance hit regardless, `repo_path` still refreshes, and the mirror still
+> regenerates unconditionally.
 
 - [ ] **Step 1: Write the failing orchestrator tests**
 
@@ -1486,6 +1513,32 @@ git commit -m "feat(onboard): orchestrate scan, review gate, DB import and scaff
 **Interfaces:**
 - Consumes: `onboard.run_onboard`, `onboard.slugify`, `onboard.ScanHit`, `onboard.OnboardResult` (Tasks 5–6).
 - Produces: the `trackden onboard` command — `trackden onboard` (wizard) and `trackden onboard <slug> [--name] [--kind] [--client] [--repo] [--no-import] [--yes]`.
+
+> **Amendment (2026-07-29, after review) — the review gate must err toward NOT importing.**
+> As first written, the `edit` branch parsed selections with
+> `{int(p) for p in picked.split(",") if p.isdigit()}` and fell through to `return items`
+> when the resulting set was empty. That made `"abc"`, `"-1"` and out-of-range `"99"`
+> indistinguishable from a deliberately blank answer, so a mistyped selection **imported
+> every item in the file** — the exact opposite of what choosing `edit` asks for, silently.
+> The same root cause made any unrecognized answer at the top-level prompt mean `y`. Both
+> contradict the spec's central promise that nothing is imported without passing the gate.
+>
+> Ruling:
+> - Top-level prompt accepts `y`/`yes`, `n`/`no`, `e`/`edit` (case-insensitive) and treats
+>   **blank as `y`**. Anything else prints that the answer was not understood and **skips the
+>   file**.
+> - `edit` sub-prompt: blank still means all; otherwise **every** comma-separated token must
+>   be a positive integer within range of the displayed list. All valid → that exact subset.
+>   Any invalid token → name it and **skip the file**. Never import a partial guess, never
+>   fall through to "all".
+> - The prompt text must make the choices and the blank-means-all behavior visible.
+>
+> Skipping is the safe direction, and it composes with Task 6's Amendment 2: a fumbled
+> answer skips the file, and because nothing was imported, re-running offers it again.
+>
+> Also added beyond the original step list: the CLI catches the `ValueError` that
+> `run_onboard` raises for an empty slug and exits non-zero with a readable message instead
+> of a traceback — the wizard takes typed names, and any all-non-ASCII name slugifies empty.
 
 - [ ] **Step 1: Write the failing CLI tests**
 
