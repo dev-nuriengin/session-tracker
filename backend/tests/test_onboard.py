@@ -101,12 +101,22 @@ def test_scan_skips_the_trackden_workspace_entirely(tmp_path):
 
 def test_scan_skips_any_file_carrying_the_generated_banner_even_outside_trackden(tmp_path):
     """Belt and braces: even a generated-looking file sitting somewhere other than
-    `.trackden` (e.g. a copy-pasted mirror) must not be imported as source."""
+    `.trackden` (e.g. a copy-pasted mirror) must not be imported as source.
+
+    Rendered WITH real items on purpose: with zero items the hit would be excluded
+    anyway (scan_repo only keeps a hit if it has items or is a guidance file), which
+    would make this test pass even if the `is_generated` check were deleted. With a
+    real item present, the file would otherwise be a legitimate hit — so this only
+    passes because `is_generated` catches it.
+    """
     from app.tracker_md import render_tracker_md
 
     root = tmp_path / "repo"
     root.mkdir()
-    (root / "_tracker.md").write_text(render_tracker_md("X", []), encoding="utf-8")
+    content = render_tracker_md(
+        "X", [{"title": "a real-looking item", "status": "todo", "folder": None}]
+    )
+    (root / "_tracker.md").write_text(content, encoding="utf-8")
     assert scan_repo(root) == []
 
 
@@ -207,6 +217,53 @@ def test_onboard_seeds_way_of_work_from_the_repos_guidance_file(home, fake_db, f
     assert content.startswith("# Way of work — P")
     assert "Seeded from `CLAUDE.md`" in content
     assert "# rules\n\nBe careful.\n" in content
+
+
+def test_onboard_a_guidance_files_checklist_seeds_but_never_imports(home, fake_db, tmp_path):
+    """FIX A (re-review): CLAUDE.md/AGENTS.md are in the scan set for exactly one
+    purpose — seeding way_of_work. A checklist inside one must not ALSO become DB
+    items; that would be the same datum living in two homes (a DB row and the
+    verbatim text under the provenance header)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "CLAUDE.md").write_text(
+        "## TODO\n- [ ] Write docs\n- [x] Setup repo\n", encoding="utf-8"
+    )
+    result = run_onboard(slug="p", name="P", repo=repo)
+
+    assert result.imported == 0
+    assert result.sources == []
+    content = (project_dir("p") / "_way-of-work.md").read_text()
+    assert "Seeded from `CLAUDE.md`" in content
+    assert "## TODO\n- [ ] Write docs\n- [x] Setup repo\n" in content
+
+
+def test_onboard_a_repo_with_only_a_guidance_checklist_imports_nothing(home, fake_db, tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "AGENTS.md").write_text(
+        "## TODO\n- [ ] Write docs\n- [x] Setup repo\n", encoding="utf-8"
+    )
+    result = run_onboard(slug="p", repo=repo)
+    assert result.imported == 0
+    assert result.sources == []
+
+
+def test_onboard_imports_only_the_tracker_file_not_the_guidance_checklist(
+    home, fake_db, tmp_path
+):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "CLAUDE.md").write_text(
+        "## TODO\n- [ ] guidance-only item\n", encoding="utf-8"
+    )
+    (repo / "_tracker.md").write_text(
+        "## Phase 0\n- [ ] real item\n", encoding="utf-8"
+    )
+    result = run_onboard(slug="p", repo=repo)
+    assert result.imported == 1
+    assert result.sources == ["_tracker.md"]
+    assert [item["title"] for item in fake_db["items"]] == ["real item"]
 
 
 def test_onboard_writes_the_generated_mirror_from_db_state(home, fake_db, fake_repo):

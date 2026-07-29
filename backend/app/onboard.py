@@ -210,6 +210,13 @@ def run_onboard(
         if hit.is_guidance and not way_of_work_text:
             way_of_work_text = hit.text
             way_of_work_relpath = hit.relpath
+        # Guidance files (CLAUDE.md/AGENTS.md) are in the scan set for exactly one
+        # purpose — seeding way_of_work above (BUILD_NOTES.md §3). A checklist
+        # inside one must never also become DB items: that would be the same
+        # datum living in two homes (a DB row AND the verbatim guidance text under
+        # the provenance header), which is exactly what the storage model forbids.
+        if hit.is_guidance:
+            continue
         # The gate — and any import it feeds — only ever runs while the project
         # has no items yet. Once it has items, new ones arrive via the CLI or an
         # MCP tool, not by re-scanning.

@@ -30,7 +30,7 @@ dev = ["pytest>=8.3"]
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
-    "db: needs a running Postgres (auto-skipped when it is not reachable)",
+    "db: needs a running Postgres (skipped when unreachable outside CI, or when TRACKDEN_SKIP_DB_TESTS=1; errors when unreachable with CI set and no opt-in)",
 ]
 
 [build-system]

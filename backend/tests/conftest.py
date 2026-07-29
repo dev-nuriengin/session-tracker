@@ -132,7 +132,21 @@ def _db_ready():
                 {"name": url.database},
             ).scalar()
             if not exists:
-                conn.execute(text(f'CREATE DATABASE "{url.database}"'))
+                try:
+                    conn.execute(text(f'CREATE DATABASE "{url.database}"'))
+                except Exception as exc:
+                    # A different problem from "Postgres is down": the server is
+                    # reachable, but this role can't create databases (no CREATEDB
+                    # privilege). Report it as clearly as the unreachable-DB path,
+                    # not as a raw SQLAlchemy traceback.
+                    pytest.fail(
+                        f"Could not create test database {url.database!r} on "
+                        f"{admin_url.render_as_string(hide_password=True)} — the "
+                        "configured role likely lacks CREATEDB privilege. Either "
+                        "grant it, or create the database by hand, or point "
+                        f"TRACKDEN_TEST_DATABASE_URL at one that already exists. "
+                        f"({exc.__class__.__name__}: {exc})"
+                    )
     finally:
         engine.dispose()
 
