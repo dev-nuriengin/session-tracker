@@ -141,3 +141,102 @@ def test_ensure_home_git_returns_false_when_git_command_fails(home):
         side_effect=subprocess.CalledProcessError(1, "git init"),
     ):
         assert ensure_home_git() is False
+
+
+from datetime import date
+
+from app.workspace import (
+    GUIDANCE_DOCS,
+    append_decision,
+    guidance_path,
+    is_template,
+    read_guidance,
+)
+
+
+def test_guidance_docs_maps_public_names_to_filenames():
+    assert GUIDANCE_DOCS == {
+        "way-of-work": "_way-of-work.md",
+        "arch": "_arch.md",
+        "decisions": "_decisions.md",
+    }
+
+
+def test_guidance_path_is_inside_the_project_folder(home):
+    assert guidance_path("p", "arch") == project_dir("p") / "_arch.md"
+
+
+def test_guidance_path_rejects_an_unknown_doc(home):
+    with pytest.raises(ValueError):
+        guidance_path("p", "not-a-doc")
+
+
+def test_guidance_path_still_rejects_an_unsafe_slug(home):
+    with pytest.raises(ValueError):
+        guidance_path("../escape", "arch")
+
+
+def test_read_guidance_returns_none_when_not_scaffolded(home):
+    assert read_guidance("p", "way-of-work") is None
+
+
+def test_read_guidance_returns_the_file_text(home):
+    scaffold_project("p", name="P")
+    text = read_guidance("p", "arch")
+    assert text is not None and "Architecture — P" in text
+
+
+def test_is_template_recognises_untouched_scaffolding(home):
+    scaffold_project("p", name="P")
+    for doc in GUIDANCE_DOCS:
+        text = read_guidance("p", doc)
+        assert is_template(doc, text, name="P") is True
+
+
+def test_is_template_is_false_once_edited(home):
+    scaffold_project("p", name="P")
+    path = guidance_path("p", "arch")
+    path.write_text(path.read_text() + "\n- the real architecture\n", encoding="utf-8")
+    assert is_template("arch", read_guidance("p", "arch"), name="P") is False
+
+
+def test_is_template_is_false_for_a_seeded_way_of_work(home):
+    scaffold_project("p", name="P", way_of_work="# rules from the repo\n")
+    assert is_template("way-of-work", read_guidance("p", "way-of-work"), name="P") is False
+
+
+def test_append_decision_returns_none_when_not_scaffolded(home):
+    assert append_decision("p", "d", "b") is None
+
+
+def test_append_decision_writes_the_template_shape(home):
+    scaffold_project("p", name="P")
+    path = append_decision(
+        "p", "Use fastembed", "keeps the core keyless", "OpenAI (needs a key)",
+        today=date(2026, 7, 29),
+    )
+    assert path == guidance_path("p", "decisions")
+    text = path.read_text()
+    assert "## 2026-07-29 — Use fastembed" in text
+    assert "- **Chose:** Use fastembed" in text
+    assert "- **Because:** keeps the core keyless" in text
+    assert "- **Rejected:** OpenAI (needs a key)" in text
+
+
+def test_append_decision_omits_rejected_when_absent(home):
+    scaffold_project("p", name="P")
+    text = append_decision("p", "d", "b", today=date(2026, 7, 29)).read_text()
+    assert "- **Rejected:**" not in text.split("## 2026-07-29")[1]
+
+
+def test_append_decision_keeps_earlier_entries_and_order(home):
+    scaffold_project("p", name="P")
+    append_decision("p", "first", "b1", today=date(2026, 7, 29))
+    text = append_decision("p", "second", "b2", today=date(2026, 7, 30)).read_text()
+    assert text.index("first") < text.index("second")
+
+
+def test_append_decision_preserves_the_scaffolded_header(home):
+    scaffold_project("p", name="P")
+    text = append_decision("p", "d", "b", today=date(2026, 7, 29)).read_text()
+    assert text.startswith("# Decisions — P")

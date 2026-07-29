@@ -11,10 +11,20 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 HOME_ENV = "TRACKDEN_HOME"
 TRACKER_FILE = "_tracker.md"
+
+# The public document names agents and the CLI use, mapped to the vendor-neutral
+# filenames on disk. One mapping, used by both the write path (scaffolding) and the
+# read path — so the two can never disagree about what a document is called.
+GUIDANCE_DOCS = {
+    "way-of-work": "_way-of-work.md",
+    "arch": "_arch.md",
+    "decisions": "_decisions.md",
+}
 
 _WAY_OF_WORK_TEMPLATE = """# Way of work — {name}
 
@@ -108,9 +118,10 @@ def scaffold_project(
     display = name or slug
 
     guidance = {
-        "_way-of-work.md": way_of_work or _WAY_OF_WORK_TEMPLATE.format(name=display),
-        "_arch.md": _ARCH_TEMPLATE.format(name=display),
-        "_decisions.md": _DECISIONS_TEMPLATE.format(name=display),
+        GUIDANCE_DOCS["way-of-work"]: way_of_work
+        or _WAY_OF_WORK_TEMPLATE.format(name=display),
+        GUIDANCE_DOCS["arch"]: _ARCH_TEMPLATE.format(name=display),
+        GUIDANCE_DOCS["decisions"]: _DECISIONS_TEMPLATE.format(name=display),
     }
 
     written: list[Path] = []
@@ -142,3 +153,79 @@ def ensure_home_git(home: Path | None = None) -> bool:
     except (OSError, subprocess.CalledProcessError):
         return False
     return True
+
+
+_TEMPLATES = {
+    "way-of-work": _WAY_OF_WORK_TEMPLATE,
+    "arch": _ARCH_TEMPLATE,
+    "decisions": _DECISIONS_TEMPLATE,
+}
+
+
+def guidance_path(slug: str, doc: str, home: Path | None = None) -> Path:
+    """Where one guidance document lives. Validates both slug and document name."""
+    if doc not in GUIDANCE_DOCS:
+        raise ValueError(f"unknown guidance doc: {doc!r}")
+    return project_dir(slug, home) / GUIDANCE_DOCS[doc]
+
+
+def read_guidance(slug: str, doc: str, home: Path | None = None) -> str | None:
+    """One guidance document's text, or None when it has not been scaffolded.
+
+    Read-only on purpose: a missing file is reported, never created. Scaffolding is
+    onboarding's job, and a folder holding one guidance file and no others would be
+    worse than an honest "not scaffolded".
+    """
+    path = guidance_path(slug, doc, home)
+    try:
+        return path.read_text(encoding="utf-8")
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+
+
+def is_template(doc: str, text: str, *, name: str) -> bool:
+    """Is this document still untouched scaffolding?
+
+    Compared against the rendered template rather than marked with a machine
+    sentinel, so the files stay clean for a human to edit. The trade-off: renaming a
+    project after scaffolding makes an untouched file look edited. The cost of that
+    is an agent reading boilerplate once.
+    """
+    if doc not in _TEMPLATES:
+        raise ValueError(f"unknown guidance doc: {doc!r}")
+    return text == _TEMPLATES[doc].format(name=name)
+
+
+def append_decision(
+    slug: str,
+    decision: str,
+    because: str,
+    rejected: str | None = None,
+    *,
+    today: date | None = None,
+    home: Path | None = None,
+) -> Path | None:
+    """Append one decision to `_decisions.md`. Returns the path, or None if absent.
+
+    `today` is injectable so tests are deterministic; production passes nothing.
+    Append-only by design — the file's own header says "never rewrite history".
+    """
+    path = guidance_path(slug, "decisions", home)
+    if not path.exists():
+        return None
+
+    stamp = (today or datetime.now(timezone.utc).date()).isoformat()
+    lines = [
+        "",
+        f"## {stamp} — {decision}",
+        "",
+        f"- **Chose:** {decision}",
+        f"- **Because:** {because}",
+    ]
+    if rejected:
+        lines.append(f"- **Rejected:** {rejected}")
+    lines.append("")
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
+    return path
