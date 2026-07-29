@@ -305,7 +305,33 @@ git commit -m "feat(guidance): add the workspace read path and decision append"
 - Consumes: `workspace.GUIDANCE_DOCS`, `read_guidance`, `is_template`, `append_decision`, `guidance_path` (Task 1); `repository.get_project`.
 - Produces:
   - `guidance.get(project: str, doc: str = "way-of-work") -> dict` — keys `project`, `doc`, `path`, `status`, `text`
-  - `guidance.add_decision(project: str, decision: str, because: str, rejected: str | None = None) -> dict` — keys `project`, `path`, `status`
+  - `guidance.add_decision(project: str, decision: str, because: str, rejected: str | None = None) -> dict` — keys `project`, `path`, `status`, `message`
+
+> **Amendment (2026-07-29, during execution) — supersedes the key lists above and the
+> `result` shape in Step 3.** As first written this task contradicted itself: Step 3's code
+> populated `result["text"]` with an explanatory message for `unknown_project` and
+> `not_scaffolded`, while Step 1's tests asserted `text is None` for exactly those statuses.
+> Following the tests (the implementer's correct instinct) then broke Task 5, whose CLI does
+> `typer.echo(result["text"])` on failure statuses and would have printed the literal string
+> `None` to the user.
+>
+> Neither half was right. `text` and "why you got nothing" are different things and must not
+> share a field:
+>
+> - **`text: str | None`** — the document's content and *only* that. `None` for **every**
+>   failure status, including `unknown_doc`.
+> - **`message: str`** — the human-readable outcome. **Always a string, never `None`**;
+>   `""` for `filled`, `template` and `appended`.
+>
+> So `get` returns six keys and `add_decision` four. Both doors print `message` verbatim —
+> and a caller that must first check whether a key exists or is `None` is a caller that will
+> eventually forget to. Rejected: composing the messages inside each wrapper, which would
+> duplicate user-facing copy across two doors, the exact drift this module exists to prevent.
+>
+> Messages: `unknown_project` → `unknown project 'x'` · `not_scaffolded` → names
+> `trackden onboard <slug>` as safe to re-run · `unknown_doc` → lists the valid document
+> names. Step 1's test list gains assertions that `message` is non-empty on every failure and
+> exactly `""` on every success, so chatter cannot leak into the success path.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -779,6 +805,7 @@ def test_guidance_prints_the_document(monkeypatch):
         lambda project, doc="way-of-work": {
             "project": project, "doc": doc, "path": "/w/_arch.md",
             "status": "filled", "text": "# Architecture\n\n- a real component\n",
+            "message": "",
         },
     )
     result = runner.invoke(app, ["guidance", "korpus", "--doc", "arch"])
@@ -791,7 +818,7 @@ def test_guidance_flags_an_untouched_template(monkeypatch):
         guidance_mod, "get",
         lambda project, doc="way-of-work": {
             "project": project, "doc": doc, "path": "/w/_arch.md",
-            "status": "template", "text": "# Architecture — K\n",
+            "status": "template", "text": "# Architecture — K\n", "message": "",
         },
     )
     result = runner.invoke(app, ["guidance", "korpus", "--doc", "arch"])
@@ -804,7 +831,8 @@ def test_guidance_exits_non_zero_when_not_scaffolded(monkeypatch):
         guidance_mod, "get",
         lambda project, doc="way-of-work": {
             "project": project, "doc": doc, "path": None,
-            "status": "not_scaffolded", "text": "run `trackden onboard korpus`",
+            "status": "not_scaffolded", "text": None,
+            "message": "run `trackden onboard korpus` (safe to re-run)",
         },
     )
     result = runner.invoke(app, ["guidance", "korpus"])
@@ -817,7 +845,10 @@ def test_decide_appends_and_reports_the_path(monkeypatch):
 
     def fake_add(project, decision, because, rejected=None):
         seen["args"] = (project, decision, because, rejected)
-        return {"project": project, "path": "/w/_decisions.md", "status": "appended"}
+        return {
+            "project": project, "path": "/w/_decisions.md",
+            "status": "appended", "message": "",
+        }
 
     monkeypatch.setattr(guidance_mod, "add_decision", fake_add)
     result = runner.invoke(
@@ -866,7 +897,7 @@ def guidance(
     """Print one of a project's guidance documents."""
     result = guidance_mod.get(project, doc)
     if result["status"] in ("unknown_project", "not_scaffolded", "unknown_doc"):
-        typer.echo(result["text"])
+        typer.echo(result["message"])  # `text` is None on every failure — see Task 2's amendment
         raise typer.Exit(1)
     if result["status"] == "template":
         typer.echo(f"({doc} is still the untouched template — {result['path']})\n")
