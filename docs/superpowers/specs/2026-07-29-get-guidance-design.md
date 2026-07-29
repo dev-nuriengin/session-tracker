@@ -33,7 +33,14 @@ work: recording a decision.
 
 ## Architecture
 
-The same three-layer split onboarding used. No new modules.
+The same layering onboarding used, plus one small orchestrator.
+
+**Correction (made while planning):** an earlier draft of this section said "no new
+modules". That was wrong. The status vocabulary needs a single owner, and neither existing
+layer can hold it — `workspace.py` cannot decide `unknown_project` (that is DB state) and
+putting it in the wrappers would duplicate it across the MCP and CLI doors, which is how two
+doors drift apart. So a small `guidance.py` orchestrates `repository` + `workspace` and owns
+the statuses, exactly as `onboard.py` orchestrates onboarding. The wrappers stay thin.
 
 | Layer | Responsibility | Change |
 |---|---|---|
