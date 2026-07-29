@@ -192,9 +192,50 @@ def test_onboard_does_not_reimport_items_when_the_project_already_exists(home, f
     result = run_onboard(slug="p", repo=fake_repo)
     assert result.created is False
     assert result.imported == 0
+    assert result.sources == []  # nothing was imported, so nothing sourced it
     assert len(fake_db["items"]) == after_first  # no duplicate items or folders
+
+
+def test_onboard_does_not_call_the_gate_on_a_re_run(home, fake_db, fake_repo):
+    calls = []
+
+    def spy(hit):
+        calls.append(hit)
+        return list(hit.parsed.items)
+
+    run_onboard(slug="p", repo=fake_repo, confirm=spy)
+    after_first = len(calls)
+    assert after_first > 0  # sanity: the gate really did run on first onboard
+
+    run_onboard(slug="p", repo=fake_repo, confirm=spy)
+    assert len(calls) == after_first  # no new invocations — the gate did not run again
 
 
 def test_onboard_initialises_the_workspace_git_repo(home, fake_db):
     assert run_onboard(slug="p").git_ready is True
     assert (home / ".git").exists()
+
+
+def test_onboard_rejects_a_name_that_slugifies_to_empty(home, fake_db):
+    with pytest.raises(ValueError):
+        run_onboard(slug="---")
+    assert fake_db["projects"] == {}  # rejected before any DB write
+
+
+def test_onboard_rejects_a_non_ascii_only_name_that_slugifies_to_empty(home, fake_db):
+    with pytest.raises(ValueError):
+        run_onboard(slug="日本語プロジェクト")
+    assert fake_db["projects"] == {}
+
+
+def test_onboard_seeds_way_of_work_from_a_later_guidance_file_when_an_earlier_one_is_empty(
+    home, fake_db, tmp_path
+):
+    repo = tmp_path / "empty-guidance-repo"
+    repo.mkdir()
+    (repo / "CLAUDE.md").write_text("", encoding="utf-8")
+    (repo / "AGENTS.md").write_text("# rules\n\nBe populated.\n", encoding="utf-8")
+    run_onboard(slug="p3", repo=repo)
+    assert (
+        project_dir("p3") / "_way-of-work.md"
+    ).read_text() == "# rules\n\nBe populated.\n"

@@ -131,7 +131,7 @@ def run_onboard(
     confirm: Confirm | None = None,
     home: Path | None = None,
 ) -> OnboardResult:
-    """Identify → scan → gate → DB → scaffold → summarise.
+    """Identify → DB → scan → gate → scaffold → summarise.
 
     Writes only to the DB and the central workspace. The repo is read, never written.
     Re-running is safe: an existing project keeps its guidance files, has its
@@ -139,8 +139,21 @@ def run_onboard(
     nothing — items are only ever imported when the project is first created.
     """
     slug = slugify(slug)
+    if not slug:
+        # Same wording `project_dir` would raise later — checked here, before any
+        # write, so a name that folds to nothing (e.g. "---", or a CJK-only name
+        # under NFKD + ascii-fold) never commits a DB row it can't then address.
+        raise ValueError("Slug cannot be empty")
     display = name or slug
     repo_path = str(Path(repo).expanduser().resolve()) if repo else None
+
+    # `created` must be known before the scan/gate loop below: only a first onboard
+    # imports anything, so only a first onboard may prompt for it.
+    created = repository.create_project(
+        slug, name=display, kind=kind, client=client, repo_path=repo_path
+    )
+    if not created and repo_path:
+        repository.set_repo_path(slug, repo_path)
 
     hits = scan_repo(repo) if (repo_path and import_items) else []
 
@@ -148,20 +161,20 @@ def run_onboard(
     sources: list[str] = []
     way_of_work: str | None = None
     for hit in hits:
-        if hit.is_guidance and way_of_work is None:
+        # Seeding way-of-work costs nothing and the scan is read-only either way, so
+        # this still runs on a re-run — an empty placeholder (e.g. a CLAUDE.md the
+        # user hasn't filled in) doesn't count as "seeded" and must not block a later,
+        # populated guidance file from doing so.
+        if hit.is_guidance and not way_of_work:
             way_of_work = hit.text
-        if not hit.parsed.items:
+        # A re-run must not re-prompt: `chosen`/`sources` — and the gate itself —
+        # only run when this onboard is the one that created the project.
+        if not created or not hit.parsed.items:
             continue
         selected = list(hit.parsed.items) if confirm is None else confirm(hit)
         if selected:
             chosen.extend(selected)
             sources.append(hit.relpath)
-
-    created = repository.create_project(
-        slug, name=display, kind=kind, client=client, repo_path=repo_path
-    )
-    if not created and repo_path:
-        repository.set_repo_path(slug, repo_path)
 
     # Items are imported ONLY on first onboard. `import_items` dedupes folder names
     # within a single call but not against rows already in the DB, so re-importing
