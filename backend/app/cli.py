@@ -12,11 +12,29 @@ import typer
 
 from . import onboard as onboard_mod
 from . import repository
+from .db import init_db
 
 app = typer.Typer(
     help="Trackden — one door into all your work.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _ensure_schema() -> None:
+    """Run before every command: make sure the schema exists.
+
+    `cli.py` never called `init_db()` before — only `repository.setup()` did (from
+    FastAPI startup / the MCP server's `__main__`), which `cli.py` calls neither.
+    Against any database whose `projects` table predates a column this branch adds
+    (e.g. `repo_path`), the first query would raise a raw `UndefinedColumn` — and
+    since `cli.py` only catches `ValueError`, every command broke, not just `onboard`.
+
+    Deliberately `init_db()`, NOT `repository.setup()` — `setup()` also seeds six
+    stub projects, which would corrupt a real user's database. This only tops up
+    missing tables/columns (idempotent), never touches data.
+    """
+    init_db()
 
 
 @app.command("list")

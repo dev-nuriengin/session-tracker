@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Literal, TypedDict
 
 TODO = "todo"
 DONE = "done"
@@ -19,12 +20,28 @@ _CHECKBOX = re.compile(r"^\s*[-*]\s*\[([ xX])\]\s+(.*?)\s*$")
 _HEADING_NOISE = re.compile(r"\s*(←.*|✅|🔴|⚠️)\s*$")
 
 
+class TrackerItem(TypedDict):
+    """The plain-dict shape exchanged at the repository/tracker_md boundary.
+
+    `repository.import_items`, `repository.items_with_folders`, and
+    `render_tracker_md` all agree on this shape — it is the untyped seam between
+    them, so one definition here keeps a faithful-looking test fake from drifting
+    from production. `status` stays `str` (not the stricter `Literal` used by
+    `ParsedItem`) because this boundary must still accept whatever a caller hands
+    it — `import_items` coerces anything but todo/done to todo, it doesn't reject it.
+    """
+
+    title: str
+    status: str
+    folder: str | None
+
+
 @dataclass
 class ParsedItem:
     """One work item recovered from a markdown checklist."""
 
     title: str
-    status: str
+    status: Literal["todo", "done"]
     folder: str | None = None
 
 
@@ -82,7 +99,17 @@ _GENERATED_BANNER = (
 )
 
 
-def render_tracker_md(project_name: str, items: list[dict]) -> str:
+def is_generated(text: str) -> bool:
+    """Is this text a trackden-generated `_tracker.md` mirror, not human-authored?
+
+    The generated file always carries this fixed banner. Anything containing it is
+    derived output — a mirror of the DB, never a source of truth — and callers that
+    scan a repo for importable checklists must skip it rather than re-import it.
+    """
+    return _GENERATED_BANNER in text
+
+
+def render_tracker_md(project_name: str, items: list[TrackerItem]) -> str:
     """Render the DB's items as the generated `_tracker.md` mirror.
 
     Derived output, never a source of truth — the banner says so to whoever opens it.

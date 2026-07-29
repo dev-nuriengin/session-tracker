@@ -1,6 +1,7 @@
 import pytest
 from typer.testing import CliRunner
 
+from app import cli as cli_mod
 from app import onboard as onboard_mod
 from app.cli import app
 
@@ -27,6 +28,12 @@ def fake_repo_with_three_items(tmp_path):
 @pytest.fixture
 def fake_db(monkeypatch):
     state = {"projects": set(), "items": []}
+
+    # FIX 1: every CLI invocation now runs the app-level schema check first. These
+    # tests exercise the CLI against a fully faked repository and must stay
+    # Postgres-free, so the schema check is faked here too — same spirit as the
+    # repository fakes below.
+    monkeypatch.setattr(cli_mod, "init_db", lambda: None)
 
     def create_project(slug, name=None, kind="personal", client=None, repo_path=None):
         if slug in state["projects"]:

@@ -1,4 +1,4 @@
-from app.tracker_md import parse_tracker_md, render_tracker_md
+from app.tracker_md import is_generated, parse_tracker_md, render_tracker_md
 
 SAMPLE = """# Trackden — build progress
 
@@ -76,3 +76,15 @@ def test_render_round_trips_through_the_parser():
         ("Write the parser", "todo", "Setup"),
         ("Loose end", "todo", "Items"),
     ]
+
+
+def test_is_generated_true_for_the_rendered_mirror():
+    assert is_generated(render_tracker_md("P", ITEMS)) is True
+
+
+def test_is_generated_false_for_hand_written_text():
+    assert is_generated("## Phase 0\n- [ ] a hand-written item\n") is False
+
+
+def test_is_generated_false_for_empty_text():
+    assert is_generated("") is False

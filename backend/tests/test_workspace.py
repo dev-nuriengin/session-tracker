@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -8,6 +9,27 @@ from app.workspace import ensure_home_git, project_dir, scaffold_project, trackd
 
 def test_trackden_home_honours_the_env_override(home):
     assert trackden_home() == home
+
+
+def test_trackden_home_expands_and_resolves_a_relative_override(tmp_path, monkeypatch):
+    """A relative TRACKDEN_HOME must not land inside the cwd (e.g. the user's repo,
+    if a caller cd'd into it) — it must resolve to an absolute path."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TRACKDEN_HOME", "relative-workspace")
+    assert trackden_home() == (tmp_path / "relative-workspace").resolve()
+    assert trackden_home().is_absolute()
+
+
+def test_trackden_home_expands_a_tilde_override(monkeypatch):
+    monkeypatch.setenv("TRACKDEN_HOME", "~/.trackden-fix9-test")
+    result = trackden_home()
+    assert "~" not in str(result)
+    assert result == (Path.home() / ".trackden-fix9-test").resolve()
+
+
+def test_trackden_home_empty_override_falls_back_to_the_default(monkeypatch):
+    monkeypatch.setenv("TRACKDEN_HOME", "")
+    assert trackden_home() == Path.home() / ".trackden"
 
 
 def test_project_dir_is_projects_slash_slug(home):
@@ -83,6 +105,16 @@ def test_project_dir_rejects_slug_with_backslash(home):
 def test_project_dir_rejects_empty_slug(home):
     with pytest.raises(ValueError):
         project_dir("")
+
+
+def test_project_dir_rejects_bare_dot_slug(home):
+    with pytest.raises(ValueError):
+        project_dir(".")
+
+
+def test_project_dir_rejects_windows_drive_relative_slug(home):
+    with pytest.raises(ValueError):
+        project_dir("D:evil")
 
 
 def test_project_dir_safe_slug_resolves_correctly(home):

@@ -78,6 +78,45 @@ def test_scan_of_a_missing_path_returns_nothing(tmp_path):
     assert scan_repo(tmp_path / "does-not-exist") == []
 
 
+# ---- FIX 2: never import a generated mirror as if it were source ----
+
+
+def test_scan_skips_the_trackden_workspace_entirely(tmp_path):
+    """`.trackden/projects/*/_tracker.md` is trackden's OWN generated mirror —
+    `**/_tracker.md` must not descend into it, even though it matches the glob."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "_tracker.md").write_text(
+        "## Phase 0\n- [ ] real item\n", encoding="utf-8"
+    )
+    mirror_dir = root / ".trackden" / "projects" / "some-project"
+    mirror_dir.mkdir(parents=True)
+    (mirror_dir / "_tracker.md").write_text(
+        "## Phase 0\n- [ ] mirrored item\n", encoding="utf-8"
+    )
+    hits = scan_repo(root)
+    assert all(".trackden" not in hit.relpath for hit in hits)
+    assert any(hit.relpath == "_tracker.md" for hit in hits)
+
+
+def test_scan_skips_any_file_carrying_the_generated_banner_even_outside_trackden(tmp_path):
+    """Belt and braces: even a generated-looking file sitting somewhere other than
+    `.trackden` (e.g. a copy-pasted mirror) must not be imported as source."""
+    from app.tracker_md import render_tracker_md
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "_tracker.md").write_text(render_tracker_md("X", []), encoding="utf-8")
+    assert scan_repo(root) == []
+
+
+def test_scan_still_returns_a_normal_hand_written_tracker_md(fake_repo):
+    """Guard against over-filtering: a real, hand-written _tracker.md (no banner)
+    must still come back."""
+    hits = {hit.relpath for hit in scan_repo(fake_repo)}
+    assert "_tracker.md" in hits
+
+
 from pathlib import Path
 
 from app import onboard as onboard_mod
@@ -160,8 +199,14 @@ def test_onboard_can_skip_importing_entirely(home, fake_db, fake_repo):
 
 
 def test_onboard_seeds_way_of_work_from_the_repos_guidance_file(home, fake_db, fake_repo):
-    run_onboard(slug="p", repo=fake_repo)
-    assert (project_dir("p") / "_way-of-work.md").read_text() == "# rules\n\nBe careful.\n"
+    """FIX 3: seeded verbatim would open with the vendor's own "# rules" heading and
+    carry no trace of where it came from — a provenance header is prepended instead,
+    and the original text is kept intact underneath it."""
+    run_onboard(slug="p", name="P", repo=fake_repo)
+    content = (project_dir("p") / "_way-of-work.md").read_text()
+    assert content.startswith("# Way of work — P")
+    assert "Seeded from `CLAUDE.md`" in content
+    assert "# rules\n\nBe careful.\n" in content
 
 
 def test_onboard_writes_the_generated_mirror_from_db_state(home, fake_db, fake_repo):
@@ -280,6 +325,97 @@ def test_onboard_seeds_way_of_work_from_a_later_guidance_file_when_an_earlier_on
     (repo / "CLAUDE.md").write_text("", encoding="utf-8")
     (repo / "AGENTS.md").write_text("# rules\n\nBe populated.\n", encoding="utf-8")
     run_onboard(slug="p3", repo=repo)
-    assert (
-        project_dir("p3") / "_way-of-work.md"
-    ).read_text() == "# rules\n\nBe populated.\n"
+    content = (project_dir("p3") / "_way-of-work.md").read_text()
+    assert "Seeded from `AGENTS.md`" in content
+    assert "# rules\n\nBe populated.\n" in content
+
+
+def test_onboard_with_no_guidance_file_still_gets_the_plain_template(home, fake_db, tmp_path):
+    """FIX 3: a project with no CLAUDE.md/AGENTS.md must not get a provenance header
+    pointing at nothing — it falls through to workspace.py's own default template."""
+    repo = tmp_path / "no-guidance-repo"
+    repo.mkdir()
+    (repo / "_tracker.md").write_text("- [ ] just an item\n", encoding="utf-8")
+    run_onboard(slug="p4", name="P4", repo=repo)
+    content = (project_dir("p4") / "_way-of-work.md").read_text()
+    assert "Seeded from" not in content
+    assert "# Way of work — P4" in content
+
+
+# ---- FIX 7: no length validation on slug or name ----
+
+from app import models  # noqa: E402 — mid-file imports match this file's existing style
+
+_SLUG_MAX = models.Project.__table__.c.slug.type.length
+_NAME_MAX = models.Project.__table__.c.name.type.length
+
+
+def test_onboard_rejects_a_slug_over_the_length_limit(home, fake_db):
+    """An over-length slug used to reach Postgres, which raises StringDataRightTruncation
+    (a DataError) — the CLI's `except ValueError` let that through as a raw traceback,
+    the same failure shape explicitly fixed for the empty slug."""
+    too_long = "a" * (_SLUG_MAX + 1)
+    with pytest.raises(ValueError):
+        run_onboard(slug=too_long)
+    assert fake_db["projects"] == {}  # rejected before any DB write
+
+
+def test_onboard_rejects_a_name_over_the_length_limit(home, fake_db):
+    with pytest.raises(ValueError):
+        run_onboard(slug="ok-slug", name="a" * (_NAME_MAX + 1))
+    assert fake_db["projects"] == {}
+
+
+def test_onboard_accepts_a_slug_exactly_at_the_length_limit(home, fake_db):
+    exact = "a" * _SLUG_MAX
+    result = run_onboard(slug=exact)
+    assert result.slug == exact
+    assert exact in fake_db["projects"]
+
+
+# ---- FIX 6: run_onboard against the REAL repository layer (no monkeypatching) ----
+#
+# Every other test in this file (and in test_cli_onboard.py) monkeypatches
+# onboard_mod.repository — the only proof that run_onboard and the real repository
+# actually fit together was a manual smoke test that will never run again. This is
+# exactly what would have caught FIX 1 (the missing schema migration on the CLI
+# path). `_db_ready` (conftest.py) points this at the dedicated TEST database.
+
+
+@pytest.mark.db
+def test_run_onboard_against_the_real_repository_layer(_db_ready, tmp_path, temp_slug):
+    from app import repository
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "_tracker.md").write_text(
+        "## Phase 0\n- [x] done thing\n- [ ] open thing\n", encoding="utf-8"
+    )
+    workspace_home = tmp_path / ".trackden"
+
+    result = run_onboard(
+        slug=temp_slug, name="Pytest Onboard Tmp", repo=repo, home=workspace_home
+    )
+
+    assert result.created is True
+    assert result.imported == 2
+
+    project = repository.get_project(temp_slug)
+    assert project is not None
+    assert project.repo_path == str(repo.resolve())
+
+    items = repository.items_with_folders(temp_slug)
+    assert sorted((item["title"], item["status"]) for item in items) == [
+        ("done thing", "done"),
+        ("open thing", "todo"),
+    ]
+
+    mirror = (workspace_home / "projects" / temp_slug / "_tracker.md").read_text()
+    assert "done thing" in mirror
+    assert "open thing" in mirror
+
+    # A second onboard of the same repo must import nothing more — the project
+    # already has items.
+    second = run_onboard(slug=temp_slug, repo=repo, home=workspace_home)
+    assert second.imported == 0
+    assert len(repository.items_with_folders(temp_slug)) == 2

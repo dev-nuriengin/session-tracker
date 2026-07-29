@@ -13,7 +13,7 @@ from . import models
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
 from .db import SessionLocal, init_db
 from .embeddings import embed
-from .tracker_md import DONE, TODO
+from .tracker_md import DONE, TODO, TrackerItem
 
 
 def _norm_path(raw: str) -> str:
@@ -142,7 +142,7 @@ def get_project_by_repo_path(repo_path: str) -> models.Project | None:
         )
 
 
-def import_items(slug: str, items: list[dict]) -> int:
+def import_items(slug: str, items: list[TrackerItem]) -> int:
     """Bulk-create items from parsed markdown, creating folders by name as needed.
 
     Each dict is `{"title", "status", "folder"}`. Any status other than todo/done is
@@ -156,7 +156,16 @@ def import_items(slug: str, items: list[dict]) -> int:
         if project is None:
             return 0
 
-        folders: dict[str, int] = {}
+        # Seed the name→id map with folders that ALREADY exist (e.g. created by
+        # `add-folder`, or by a prior onboard) so re-running import never creates a
+        # second `Folder` row with the same name — this map only dedupes within a
+        # single call otherwise.
+        folders: dict[str, int] = {
+            folder.name: folder.id
+            for folder in db.scalars(
+                select(models.Folder).where(models.Folder.project_id == project.id)
+            ).all()
+        }
         created = 0
         for position, raw in enumerate(items):
             name = raw.get("folder")
@@ -183,7 +192,7 @@ def import_items(slug: str, items: list[dict]) -> int:
         return created
 
 
-def items_with_folders(slug: str) -> list[dict]:
+def items_with_folders(slug: str) -> list[TrackerItem]:
     """Every item plus its folder NAME — the shape `render_tracker_md` wants."""
     with SessionLocal() as db:
         project = db.scalar(

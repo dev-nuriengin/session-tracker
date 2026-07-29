@@ -1,14 +1,19 @@
-"""The real Postgres round-trip. Auto-skipped when the DB is down (see conftest)."""
+"""The real Postgres round-trip, against the dedicated TEST database (see
+conftest.py: `_db_ready`, injected automatically for every `@pytest.mark.db` test).
+"""
 
 import pytest
+from sqlalchemy import select
 
-from app import repository
-from app.db import init_db
+from app import models, repository
+from app.db import SessionLocal
 
 
 @pytest.fixture(autouse=True)
-def _schema():
-    init_db()
+def _schema(_db_ready):
+    """Every test in this file is `@pytest.mark.db`; this just makes sure the
+    shared, session-scoped `_db_ready` bootstrap has run before each one — the
+    actual schema creation happens once, in `_db_ready` itself."""
 
 
 @pytest.mark.db
@@ -80,3 +85,29 @@ def test_import_items_on_an_unknown_project_writes_nothing(temp_slug):
 @pytest.mark.db
 def test_items_with_folders_on_an_unknown_project_is_empty():
     assert repository.items_with_folders("no-such-project-xyz") == []
+
+
+@pytest.mark.db
+def test_import_items_reuses_a_folder_created_out_of_band(temp_slug):
+    """FIX 11: `import_items` used to dedupe folder names only within its own call.
+    `create_folder` (e.g. via `trackden add-folder`) can create a folder BEFORE any
+    import runs; a later import referencing that same name must reuse it, not create
+    a second `Folder` row with the same name."""
+    repository.create_project(temp_slug)
+    existing_id = repository.create_folder(temp_slug, "Phase 0")
+
+    count = repository.import_items(
+        temp_slug, [{"title": "new item", "status": "todo", "folder": "Phase 0"}]
+    )
+    assert count == 1
+
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == temp_slug))
+        folders = db.scalars(
+            select(models.Folder).where(
+                models.Folder.project_id == project.id, models.Folder.name == "Phase 0"
+            )
+        ).all()
+
+    assert len(folders) == 1
+    assert folders[0].id == existing_id

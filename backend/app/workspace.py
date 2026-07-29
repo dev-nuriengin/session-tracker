@@ -9,6 +9,7 @@ what lets tests (and multiple profiles) run without touching the real home.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -55,9 +56,18 @@ _DECISIONS_TEMPLATE = """# Decisions — {name}
 
 
 def trackden_home() -> Path:
-    """The workspace root — `$TRACKDEN_HOME`, else `~/.trackden`."""
+    """The workspace root — `$TRACKDEN_HOME`, else `~/.trackden`.
+
+    An override is expanded (`~`) and resolved (relative → absolute) so a relative
+    `TRACKDEN_HOME` can never land inside the current directory — i.e. inside
+    whatever repo the caller happens to be standing in. An empty override falls
+    back to the default, same as before.
+    """
     override = os.environ.get(HOME_ENV)
-    return Path(override) if override else Path.home() / ".trackden"
+    return Path(override).expanduser().resolve() if override else Path.home() / ".trackden"
+
+
+_SAFE_SLUG = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 def project_dir(slug: str, home: Path | None = None) -> Path:
@@ -67,24 +77,14 @@ def project_dir(slug: str, home: Path | None = None) -> Path:
     bypassing the CLI (e.g., an agent-driven onboarding path) must not be able to
     break it. Path-traversal attempts are caught here rather than silently sanitised.
 
-    Raises ValueError if the slug is empty, absolute, contains path separators, or
-    contains `..` segments.
+    A whitelist, not a blacklist: `slug` must fully match lowercase alphanumerics
+    and hyphens (after a lowercase-alphanumeric first character). That one rule
+    covers empty, absolute, separator-containing, `..`-containing, bare-`.`, and
+    Windows-drive-relative (`D:evil`) slugs alike — `slugify` only ever emits
+    lowercase alphanumerics and hyphens, so the happy path is unaffected.
     """
-    # Reject empty slug
-    if not slug:
-        raise ValueError("Slug cannot be empty")
-
-    # Reject absolute slug (would discard home via Path.__truediv__ semantics)
-    if slug.startswith("/"):
-        raise ValueError(f"Slug must not be absolute: {slug}")
-
-    # Reject path separators that could escape or confuse the workspace
-    if "/" in slug or "\\" in slug:
-        raise ValueError(f"Slug must not contain path separators: {slug}")
-
-    # Reject .. traversal attempts
-    if ".." in slug:
-        raise ValueError(f"Slug must not contain .. segments: {slug}")
+    if not re.fullmatch(_SAFE_SLUG, slug):
+        raise ValueError(f"unsafe project slug: {slug!r}")
 
     return (home or trackden_home()) / "projects" / slug
 
