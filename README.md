@@ -67,8 +67,9 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 - **Hybrid store (no-overlap rule).** **Postgres** owns *state* — `projects → items →
   status → session logs` + embeddings. **Per-project guidance files** (arch, way-of-work,
   decisions; vendor-neutral names) own *durable human knowledge* — human-editable, git-friendly.
-  **pgvector** is a derived semantic-search index over **both**. *(Planned: today's build is
-  DB-only; the guidance-files layer is the next phase. Full spec: `BUILD_NOTES.md`.)*
+  **pgvector** is a derived semantic-search index over **both**. *(`trackden onboard` now
+  scaffolds the guidance-files layer to `~/.trackden` — it isn't exposed over MCP yet, only
+  DB state travels there today. Full spec: `BUILD_NOTES.md`.)*
 - **MCP server** — the primary door; how agents consume the tracker in a standard way.
 - **CLI (`trackden`)** — the main human door: query projects/items, start/resume sessions,
   save steps.
@@ -144,7 +145,7 @@ cd frontend && npm run dev                                 # web view → :3000
 
 **The three doors (all on the same local core):**
 - **MCP** (agents): `.mcp.json` wires Claude Code to it, or run `uv run python -m app.mcp_server`
-- **CLI** (you): `uv run trackden list` · `trackden show <p>` · `trackden add-project <slug>` · `trackden ask "<q>"` · `trackden eval`
+- **CLI** (you): `uv run trackden onboard` · `trackden list` · `trackden show <p>` · `trackden add-project <slug>` · `trackden ask "<q>"` · `trackden eval`
 - **Web**: http://localhost:3000
 
 **Optional (off by default, opt-in):** Langfuse tracing (`LANGFUSE_*` env vars) · a cloud

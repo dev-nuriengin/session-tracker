@@ -29,40 +29,23 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
-### ✅ RESOLVED — `trackden onboard` design (approved 2026-07-28)
+### ✅ DONE — `trackden onboard` (shipped 2026-07-29)
 
-**Approved.** Name confirmed **Trackden** (no rename to "Trackerden"). The design is now
-written down in two places, so it no longer lives in this scratch block:
+Onboarding shipped end-to-end: read-only repo scan → review gate (y/n/edit, defaults to
+import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → summary. Spec:
+`BUILD_NOTES.md` → "LOCKED DESIGN — Onboarding (`trackden onboard`)". Implementation plan
+(8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
+Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-- **Spec:** `BUILD_NOTES.md` → "LOCKED DESIGN — Onboarding (`trackden onboard`)".
-- **Implementation plan:** `docs/superpowers/plans/2026-07-28-trackden-onboard.md`
-  (8 tasks, TDD, bite-sized).
-
-**▸ NEXT: execute that plan, Task 1 first.** Two findings the plan already accounts for:
-`projects` has no `repo_path` and `init_db` only does `create_all` (which never ALTERs an
-existing table), and the repo has **no test suite yet** — onboarding is where pytest lands.
-
-**Context that led here (all DECIDED & already in code/docs):**
-- Product renamed **Session Tracker → Trackden** (CLI `sess`→`trackden`, MCP `session-tracker`→`trackden`). Committed & pushed (`7b0a068`).
-- **FIRST principle: LLM-agnostic** — MCP is the one contract; vendor-neutral file names; per-vendor files are shims.
-- **Hybrid storage — LOCKED** (see BUILD_NOTES "LOCKED DESIGN"): DB owns *state*; vendor-neutral *files* own guidance; pgvector = derived index. Routing = **tool is the destination** (LLM never picks storage). Backup = files→git, DB→`pg_dump` + `trackden export`.
-
-**Onboarding decisions locked in this session (NOT yet written to BUILD_NOTES):**
-1. **Wrapper home = CENTRAL** — `~/.trackden/projects/<slug>/` (repos stay untouched; guidance reached via MCP only; `~/.trackden` = one git repo for backup).
-2. **UX = interactive wizard (default) + flags** — captures name/slug/kind/**repo_path**/folders/items.
-3. **Import = auto-detect & import** — scan repo (`**/_tracker.md`, `main-plans/_tracker.md`, `_tickets-and-status/_tracker.md`, `CLAUDE.md`, `AGENTS.md`), parse checkbox lists, **review gate before writing**, fallback to fresh scaffold.
-
-**Full drafted design (the thing to write into BUILD_NOTES on approval):**
-- Command: `trackden onboard` (wizard) / `trackden onboard <slug> --name --kind --repo --no-import`.
-- Steps: identify → scan+import (with y/n/edit gate) → create DB project (+`repo_path`) → scaffold central guidance → summary.
-- Scaffold: `~/.trackden/projects/<slug>/` → `_way-of-work.md` (seeded from repo CLAUDE.md if found), `_arch.md`, `_decisions.md`, `_tracker.md` (**generated mirror** of DB, not hand-edited).
-- Data: DB = project(slug,name,kind,client,repo_path) + imported items/status; Files = way-of-work/arch/decisions; `_tracker.md` = derived.
-- **Deferred (flagged, not designed):** (a) auto-trigger "call MCP first" needs a **launcher/alias** (repos untouched → no in-repo shim); onboard can *offer* an alias snippet. (b) agent-driven onboard via MCP tool — CLI-first now.
+**▸ NEXT:** nothing queued. Pick from Phase 11's deferred items (launcher/alias, agent-driven
+onboard as an MCP tool) or from "NEXT (optional / future)" below.
 
 ---
 
-**Status:** 26 / 28 — **ALL CORE PHASES DONE (0–10).** The 2 open items are
-explicitly-deferred future refinements: Phase 7 optional cloud store, Phase 8 hybrid+rerank.
+**Status:** 33 / 37 — **ALL CORE PHASES DONE (0–11).** The 4 open items are
+explicitly-deferred future refinements: Phase 7 optional cloud store, Phase 8
+hybrid+rerank, Phase 11 launcher/alias for agents, Phase 11 agent-driven onboard as an
+MCP tool.
 
 **Build complete.** The whole product exists: local Postgres core → three doors (MCP · CLI
 · web), summary-first, private, provider-swappable, with RAG + eval + opt-in observability,
@@ -75,8 +58,10 @@ without an agent, or background jobs). Security follow-up done: eval redacts at 
 boundary; `redact()` is best-effort defense-in-depth.
 
 **NEXT (optional / future):** hybrid search + rerank (Phase 8) · folder grouping in the web
-UI · optional cloud store + hosted UI (opt-in) · remove the superseded `cli/` skeleton ·
-start dogfooding (retire `_tracker.md` into the product itself).
+UI · optional cloud store + hosted UI (opt-in) · launcher/alias so agents "call MCP first"
+without touching repos · agent-driven onboard exposed as an MCP tool · remove the
+superseded `cli/` skeleton · start dogfooding (retire `_tracker.md` into the product itself,
+onboarding onto itself).
 
 **Ship (Phase 10) in place:** `backend/Dockerfile` (uv) + `docker compose up --build`
 (db healthcheck → backend, `ANTHROPIC_API_KEY` from `.env`) + `.dockerignore` + README run
@@ -151,3 +136,14 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 
 ## Phase 10 — Ship ✅
 - [x] Dockerize for local run: `backend/Dockerfile` (uv) + `docker compose up --build` (db healthcheck → backend); `.dockerignore`; README run docs. Cloud/UI + auth remain opt-in only.
+
+## Phase 11 — Onboarding (`trackden onboard`) ✅
+- [x] `tracker_md.py` — the `_tracker.md` format both ways (parse + render), pure & tested
+- [x] `workspace.py` — central `~/.trackden` scaffolding with slug validation; guidance files are never overwritten once written; scaffolds the home as a git repo
+- [x] `projects.repo_path` + idempotent `ALTER` in `init_db` (`create_all` never alters an existing table) + `import_items` / `items_with_folders`
+- [x] `onboard.py` — read-only repo scan, in priority order: `_tracker.md` · `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `**/_tracker.md` · `CLAUDE.md` · `AGENTS.md` (the last two seed `_way-of-work.md`, never treated as sources of truth)
+- [x] `run_onboard` orchestrator: identify → scan+gate → DB project → scaffold → summary; the review gate (y/n/edit, blank = import) only ever runs while a project is itemless, so re-onboarding can't duplicate items
+- [x] `trackden onboard` CLI: interactive wizard + flags (`--name --kind --client --repo --no-import --yes/-y`)
+- [x] pytest enters the repo for the first time (81 tests); DB-marked tests auto-skip when Postgres is unreachable
+- [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
+- [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)

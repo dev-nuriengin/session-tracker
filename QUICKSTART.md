@@ -26,17 +26,46 @@ First boot creates the vector extension, tables, and a small seed automatically.
 
 > ✅ Check it's alive: open http://localhost:8000/projects — you should see JSON.
 
-## 2 · Add your first project (1 min)
+## 2 · Onboard your first project (1 min)
 
-Use the CLI (`trackden`) to build your map — **Project → folders → items**.
-The CLI lives in `backend/`, so run it from there (it talks to the DB started in step 1,
-default `localhost:5433` — no config needed):
+One command brings a project in: it scans the repo you point it at, offers to import
+any checklist it finds, and scaffolds the rest. **Your repo is never modified.** The CLI
+lives in `backend/`, so run it from there (it talks to the DB started in step 1, default
+`localhost:5433` — no config needed):
 
 ```bash
 cd backend
+uv run trackden onboard                 # interactive wizard
+```
+
+Already have a `_tracker.md`, `CLAUDE.md`, or `AGENTS.md`? It finds them and asks before
+importing anything — blank/`y` imports the whole file, `n` skips it, `edit` lets you pick
+items by number:
+
+```
+Found 3 items in _tracker.md
+    1. [done] Scaffold the repo
+    2. [todo] Wire the API
+    3. [todo] Ship it
+Import? (y / n / edit) [y]:
+```
+
+Nothing imports until you say yes — decline (or have nothing to import yet) and the same
+gate is offered again next run. Once a project holds items it's never re-imported, so
+re-running `onboard` can't create duplicates; new items from then on come from
+`trackden add-item` or an MCP tool. `--no-import` skips the scan entirely (no guidance is
+seeded from the repo either).
+
+Guidance lands centrally in `~/.trackden/projects/<slug>/` (`_way-of-work.md`, `_arch.md`,
+`_decisions.md`, plus a **generated** `_tracker.md` mirror — don't hand-edit it), and
+`~/.trackden` is a git repo of its own, so one push backs up every project's guidance.
+
+Prefer to build the map by hand? The primitives are still there:
+
+```bash
 uv run trackden add-project my-first-project
 uv run trackden add-item my-first-project "Set up the repo"
-uv run trackden list                   # see it in the tracker
+uv run trackden list
 ```
 
 That's your structure. An "item" is domain-agnostic — a *ticket*, a *bill*, a *deliverable*;

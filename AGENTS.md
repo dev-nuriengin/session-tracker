@@ -26,11 +26,13 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
 - **Structure (the user configures it interactively):** **Project → sub-folders → items.**
   Terminology is **domain-agnostic** — an "item" is a *ticket* (IT), a *bill* (accounting),
   a *deliverable* (design). Never bake domain jargon into schema/API/UI.
-- **Hybrid storage (LOCKED design; files part *planned*).** No-overlap rule:
+- **Hybrid storage (LOCKED design).** No-overlap rule:
   **DB** owns *state* (items, status, logs, embeddings); **per-project guidance files**
   (arch/way-of-work/decisions, vendor-neutral names) own *durable human knowledge*;
   **pgvector** is a derived search index over both. Full spec in `BUILD_NOTES.md` →
-  "LOCKED DESIGN — Storage model". *(Today's code is DB-only; the files layer is planned.)*
+  "LOCKED DESIGN — Storage model". *(`trackden onboard` scaffolds the files layer to
+  `~/.trackden` today; it is not yet exposed as an MCP tool — only DB state travels
+  over MCP so far.)*
 - **One core, three doors.** Doors = **MCP** (agents, primary — the heart), **CLI**
   (`trackden`), **web** (local view).
 - **Continuity is the point:** a new session/CLI **pulls the item's history first** —
@@ -39,7 +41,8 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
   (a limited overview/table); drill deeper only on demand. **NEVER dump everything at once**
   — it burns tokens. `overview()` = cheap first look; `get_history()` = heavy drill-down.
 - **Captures progress behind the scenes** (→ DB logs) and stores **concrete memory**:
-  repo links / metadata → DB; **decisions → guidance files** (`_decisions.md`, *planned*).
+  repo links / metadata → DB; **decisions → guidance files** (`_decisions.md`, scaffolded
+  by `trackden onboard`, then hand-edited from there).
 - **Data is LOCAL & PRIVATE by default.** *State* (DB) stays on the machine (optional
   cloud store = future, opt-in). *Guidance files* may be backed up to a **private** git
   repo at the user's choice (still private, never public). App *code* is public on GitHub.
@@ -61,9 +64,21 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
 
 - `backend/app/main.py` — FastAPI: `/chat`, `/agent`, `/graph`.
 - `backend/app/db.py` · `models.py` · `repository.py` — the Postgres core (Phase 4).
+- `backend/app/onboard.py` · `workspace.py` · `tracker_md.py` — `trackden onboard`: the
+  read-only repo scan + review gate, the central `~/.trackden` workspace scaffolder, and
+  the `_tracker.md` parse/render pair.
 - `backend/app/graph.py` — the LangGraph brain (optional helper).
 - `backend/app/tools.py` — LangChain tools.
-- `cli/` — the `trackden` CLI · `frontend/` — Next.js web view · `docker-compose.yml` — Postgres+pgvector.
+- `backend/app/cli.py` — the `trackden` CLI (console script `trackden = app.cli:app`); the
+  old `cli/` skeleton is superseded (remove later).
+- `frontend/` — Next.js web view · `docker-compose.yml` — Postgres+pgvector.
+
+**Guidance lives centrally, not in the repo.** A project's `_way-of-work.md`, `_arch.md`
+and `_decisions.md` live in `~/.trackden/projects/<slug>/` — `trackden onboard` puts them
+there. Read them directly from disk; they are not yet exposed as an MCP tool, so only
+DB-backed state (items, memory, logs) travels over MCP today. Repos are never modified by
+Trackden. The `_tracker.md` in that folder is a **generated mirror** of the DB; do not
+hand-edit it.
 
 ## Run
 
