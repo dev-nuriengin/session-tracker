@@ -136,7 +136,10 @@ def remember(
     except ValueError as exc:
         typer.echo(str(exc))
         raise typer.Exit(1)
-    typer.echo("✓ saved to memory" if ok else f"unknown project '{project}'")
+    if not ok:
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+    typer.echo("✓ saved to memory")
 
 
 @app.command("eval")
@@ -312,19 +315,13 @@ def guidance(
 def decide(
     project: str,
     decision: str,
-    because: str = typer.Option(..., help="Why this was chosen (required)"),
+    because: str = typer.Option(..., help="Why this was chosen"),
     rejected: str = typer.Option(None, help="The alternative you turned down"),
 ):
     """Record a decision, and its reasoning, in the project's decisions log."""
     result = guidance_mod.add_decision(project, decision, because, rejected)
-    if result["status"] == "unknown_project":
-        typer.echo(f"unknown project '{project}'")
-        raise typer.Exit(1)
-    if result["status"] == "not_scaffolded":
-        typer.echo(
-            f"no guidance folder for '{project}' yet — run `trackden onboard {project}` "
-            "(safe to re-run) to scaffold it"
-        )
+    if result["status"] in ("unknown_project", "not_scaffolded"):
+        typer.echo(result["message"])
         raise typer.Exit(1)
     typer.echo(f"✓ decision recorded in {result['path']}")
 
