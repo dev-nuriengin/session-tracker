@@ -38,8 +38,10 @@ def list_items(project: str, include_done: bool = False) -> list[dict]:
 
 @mcp.tool()
 def list_memory(project: str) -> list[dict]:
-    """Drill-down: the project's durable memory (decisions, links, notes).
-    Use AFTER overview, only when you need the details."""
+    """Drill-down: the project's durable memory — repo links, notes, meeting
+    transcripts. Decisions are NOT here: they live in the project's guidance file —
+    read them with get_guidance(project, doc="decisions"). Use AFTER overview, only
+    when you need the details."""
     return repository.list_memory(project)
 
 
@@ -50,7 +52,8 @@ def get_guidance(project: str, doc: str = "way-of-work") -> dict:
     the human's rules for this codebase. One document per call, so you never pay for
     what you are not using. doc: way-of-work | arch | decisions.
     `status` tells you what you got: filled (real content) · template (untouched
-    boilerplate, don't over-read it) · not_scaffolded · unknown_project · unknown_doc."""
+    boilerplate, don't over-read it) · not_scaffolded · unknown_project · unknown_doc ·
+    invalid_slug (the project's stored slug isn't usable for guidance)."""
     return guidance.get(project, doc)
 
 
@@ -63,7 +66,8 @@ def add_decision(
     decision without its reason is worthless to the next session. `rejected` is the
     alternative you turned down, if there was one. This writes to the guidance file,
     NOT the memory table — for links and notes use add_memory instead.
-    `status` tells you what you got: appended · not_scaffolded · unknown_project."""
+    `status` tells you what you got: appended · not_scaffolded · unknown_project ·
+    invalid_slug (the project's stored slug isn't usable for guidance)."""
     return guidance.add_decision(project, decision, because, rejected)
 
 
@@ -112,7 +116,9 @@ def add_memory(
         saved = repository.add_memory(project, content, kind=kind, title=title, url=url)
     except ValueError as exc:
         return {"status": "rejected_kind", "message": str(exc)}
-    return {"status": "saved" if saved else "unknown_project"}
+    if not saved:
+        return {"status": "unknown_project", "message": f"unknown project {project!r}"}
+    return {"status": "saved", "message": ""}
 
 
 if __name__ == "__main__":

@@ -19,6 +19,18 @@ def known_project(monkeypatch):
     monkeypatch.setattr(guidance_mod.repository, "get_project", get_project)
 
 
+@pytest.fixture
+def unsafe_slug_project(monkeypatch):
+    """`repository.get_project` returns a row whose STORED slug is unsafe for the
+    filesystem (e.g. underscores from a hand-typed `trackden add-project my_project`,
+    which only `.strip().lower()`s — it never validates)."""
+
+    def get_project(slug):
+        return SimpleNamespace(slug="my_project", name="My Project") if slug == "my_project" else None
+
+    monkeypatch.setattr(guidance_mod.repository, "get_project", get_project)
+
+
 def test_get_reports_unknown_project(home, known_project):
     result = get("nope")
     assert result["status"] == "unknown_project"
@@ -91,6 +103,35 @@ def test_add_decision_appends_and_reports_appended(home, known_project):
 def test_add_decision_never_scaffolds(home, known_project):
     add_decision("p", "d", "b")
     assert not guidance_path("p", "decisions").exists()
+
+
+def test_get_reports_invalid_slug_instead_of_raising(home, unsafe_slug_project):
+    result = get("my_project")
+    assert result["status"] == "invalid_slug"
+    assert result["text"] is None
+    assert result["message"]
+    assert "my_project" in result["message"]
+
+
+def test_get_still_works_for_a_normal_slug(home, known_project):
+    """Confirms the fix didn't break the happy path: a safe slug is unaffected."""
+    scaffold_project("p", name="P")
+    result = get("p")
+    assert result["status"] in ("template", "filled")
+
+
+def test_add_decision_reports_invalid_slug_instead_of_raising(home, unsafe_slug_project):
+    result = add_decision("my_project", "d", "b")
+    assert result["status"] == "invalid_slug"
+    assert result["message"]
+    assert "my_project" in result["message"]
+
+
+def test_add_decision_still_works_for_a_normal_slug(home, known_project):
+    """Confirms the fix didn't break the happy path: a safe slug is unaffected."""
+    scaffold_project("p", name="P")
+    result = add_decision("p", "Use fastembed", "keeps the core keyless")
+    assert result["status"] == "appended"
 
 
 @pytest.mark.db

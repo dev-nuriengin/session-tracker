@@ -75,7 +75,10 @@ boundary; `redact()` is best-effort defense-in-depth.
 UI · optional cloud store + hosted UI (opt-in) · launcher/alias so agents "call MCP first"
 without touching repos · agent-driven onboard exposed as an MCP tool · remove the
 superseded `cli/` skeleton · start dogfooding (retire `_tracker.md` into the product itself,
-onboarding onto itself).
+onboarding onto itself) · `trackden add-folder`, `add-item`, and `log` still echo a failure
+message and exit 0 on an unknown project — `remember` was fixed to exit non-zero on failure
+in this branch, those three were deliberately left for a follow-up so a script can actually
+detect that nothing was saved.
 
 **Ship (Phase 10) in place:** `backend/Dockerfile` (uv) + `docker compose up --build`
 (db healthcheck → backend, `ANTHROPIC_API_KEY` from `.env`) + `.dockerignore` + README run
@@ -164,7 +167,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 
 ## Phase 12 — Guidance path: read + one write, over every door ✅
 - [x] `workspace.py`: `GUIDANCE_DOCS` (the one mapping read and write share) + the read path — `guidance_path`, `read_guidance` (`None` when not scaffolded, never creates), `is_template` (untouched-scaffolding check), `append_decision` (append-only, refuses to scaffold a missing folder)
-- [x] `guidance.py` orchestrator: `get(project, doc="way-of-work")` and `add_decision(project, decision, because, rejected=None)` — a `status` vocabulary (`filled` · `template` · `not_scaffolded` · `unknown_project` · `unknown_doc` · `appended`) instead of exceptions crossing the MCP boundary
+- [x] `guidance.py` orchestrator: `get(project, doc="way-of-work")` and `add_decision(project, decision, because, rejected=None)` — a `status` vocabulary (`filled` · `template` · `not_scaffolded` · `unknown_project` · `unknown_doc` · `appended` · `invalid_slug`) instead of exceptions crossing the MCP boundary
 - [x] MCP tools `get_guidance` and `add_decision` (`mcp_server.py`)
 - [x] CLI commands `trackden guidance <project> [--doc]` and `trackden decide <project> <decision> --because [--rejected]` (`cli.py`)
 - [x] `repository.MEMORY_KINDS` narrows the `memory` table to `link | note | transcript`; `add_memory` raises `ValueError` outside it — `remember` (CLI) and `add_memory` (MCP) both catch it and exit/return non-success rather than crash

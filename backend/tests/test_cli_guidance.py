@@ -74,6 +74,21 @@ def test_guidance_exits_non_zero_for_an_unknown_doc(monkeypatch):
     assert sentinel in result.output
 
 
+def test_guidance_exits_non_zero_for_an_invalid_slug(monkeypatch):
+    sentinel = "TESTSENTINEL-invalid-slug-a10f (guidance/my_project)"
+    monkeypatch.setattr(
+        guidance_mod, "get",
+        lambda project, doc="way-of-work": {
+            "project": project, "doc": doc, "path": None,
+            "status": "invalid_slug", "text": None,
+            "message": sentinel,
+        },
+    )
+    result = runner.invoke(app, ["guidance", "my_project"])
+    assert result.exit_code == 1
+    assert sentinel in result.output
+
+
 def test_decide_appends_and_reports_the_path(monkeypatch):
     seen = {}
 
@@ -128,6 +143,20 @@ def test_decide_exits_non_zero_for_an_unknown_project(monkeypatch):
         },
     )
     result = runner.invoke(app, ["decide", "bogus-project", "d", "--because", "b"])
+    assert result.exit_code == 1
+    assert sentinel in result.output
+
+
+def test_decide_exits_non_zero_for_an_invalid_slug(monkeypatch):
+    sentinel = "TESTSENTINEL-invalid-slug-c31b (decide/my_project)"
+    monkeypatch.setattr(
+        guidance_mod, "add_decision",
+        lambda project, decision, because, rejected=None: {
+            "project": project, "path": None, "status": "invalid_slug",
+            "message": sentinel,
+        },
+    )
+    result = runner.invoke(app, ["decide", "my_project", "d", "--because", "b"])
     assert result.exit_code == 1
     assert sentinel in result.output
 

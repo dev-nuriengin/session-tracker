@@ -30,6 +30,15 @@ from . import repository, workspace
 DEFAULT_DOC = "way-of-work"
 
 
+def _invalid_slug_message(slug: str) -> str:
+    """Shared wording for the `invalid_slug` status — used by both `get` and
+    `add_decision` so the two doors never disagree on what "unusable" means."""
+    return (
+        f"project slug {slug!r} is not usable for guidance — a usable slug is "
+        "lowercase letters, digits, and hyphens only (e.g. 'my-project')"
+    )
+
+
 def get(project: str, doc: str = DEFAULT_DOC) -> dict:
     """Read one guidance document. Never writes, never raises.
 
@@ -58,8 +67,20 @@ def get(project: str, doc: str = DEFAULT_DOC) -> dict:
         result["message"] = f"unknown project {project!r}"
         return result
 
-    result["path"] = str(workspace.guidance_path(row.slug, doc))
-    text = workspace.read_guidance(row.slug, doc)
+    try:
+        path = workspace.guidance_path(row.slug, doc)
+        text = workspace.read_guidance(row.slug, doc)
+    except ValueError:
+        # The DB thinks the project is real, but its stored slug fails workspace's
+        # filesystem-safety check — e.g. `trackden add-project my_project`, which
+        # only lowercases and strips, never validates. Report it, don't raise: the
+        # "never raises" promise is guidance.py's to keep regardless of what
+        # upstream (repository.create_project) allows.
+        result["status"] = "invalid_slug"
+        result["message"] = _invalid_slug_message(row.slug)
+        return result
+
+    result["path"] = str(path)
     if text is None:
         result["status"] = "not_scaffolded"
         result["message"] = (
@@ -90,7 +111,14 @@ def add_decision(
         result["message"] = f"unknown project {project!r}"
         return result
 
-    path = workspace.append_decision(row.slug, decision, because, rejected)
+    try:
+        path = workspace.append_decision(row.slug, decision, because, rejected)
+    except ValueError:
+        # Same unsafe-stored-slug case as `get` — see the comment there.
+        result["status"] = "invalid_slug"
+        result["message"] = _invalid_slug_message(row.slug)
+        return result
+
     if path is None:
         result["path"] = str(workspace.guidance_path(row.slug, "decisions"))
         result["status"] = "not_scaffolded"

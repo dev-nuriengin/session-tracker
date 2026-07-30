@@ -34,8 +34,9 @@ session and ticked at the end — see this repo's own [`_tracker.md`](./_tracker
   pulls its progress — *"what did you do, where are you?"* — and saves the work and
   item updates into itself. The standard door for this is **MCP → the MCP server is
   the heart of the product.**
-- **It holds concrete memory:** decisions, repo links (GitLab/GitHub), meeting/decision
-  notes — durable facts that survive across sessions.
+- **It holds concrete memory:** repo links (GitLab/GitHub) and meeting/decision notes in
+  its memory table, plus decisions (with their reasoning) in each project's guidance
+  file — durable facts that survive across sessions.
 - **It guarantees continuity:** when a new CLI/session opens, the agent first pulls the
   project's history from the tracker. It never starts blind (*"I don't know this item's
   history"*).
@@ -67,9 +68,12 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
 - **Hybrid store (no-overlap rule).** **Postgres** owns *state* — `projects → items →
   status → session logs` + embeddings. **Per-project guidance files** (arch, way-of-work,
   decisions; vendor-neutral names) own *durable human knowledge* — human-editable, git-friendly.
-  **pgvector** is a derived semantic-search index over **both**. *(`trackden onboard` now
-  scaffolds the guidance-files layer to `~/.trackden` — it isn't exposed over MCP yet, only
-  DB state travels there today. Full spec: `BUILD_NOTES.md`.)*
+  **pgvector** is a derived semantic-search index — today over session logs only; guidance
+  files are not indexed by `search` yet. *(`trackden onboard` scaffolds the guidance-files
+  layer to `~/.trackden`; guidance is readable over MCP via `get_guidance`, and decisions
+  are recorded with `add_decision` — but `update_guidance` does not exist yet: editing the
+  rules or architecture themselves is still a human action on the file. Full spec:
+  `BUILD_NOTES.md`.)*
 - **MCP server** — the primary door; how agents consume the tracker in a standard way.
 - **CLI (`trackden`)** — the main human door: query projects/items, start/resume sessions,
   save steps.
@@ -86,8 +90,9 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
    (full memory, all items, session history). **Progressive disclosure**, not one big load.
 3. **While working** → the tracker **captures progress behind the scenes** — it pulls
    *"what's your progress?"* and saves the work + item updates into itself.
-4. **Durable memory** → decisions, repo links, and meeting/decision notes persist across
-   sessions and agents.
+4. **Durable memory** → repo links and meeting notes (`add_memory`), plus decisions and
+   their reasoning (`add_decision`, into the project's guidance file) — both persist
+   across sessions and agents.
 5. **Continuity** → the next session (any agent, any CLI) resumes — again from the summary
    first, drilling deeper only when required.
 

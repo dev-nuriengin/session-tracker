@@ -69,3 +69,16 @@ def test_add_memory_reports_a_rejected_kind_instead_of_raising(monkeypatch):
     result = mcp_server.add_memory("korpus", "we chose X", kind="decision")
     assert result["status"] == "rejected_kind"
     assert "add_decision" in result["message"]
+
+
+def test_add_memory_reports_saved_with_a_message_key(monkeypatch):
+    monkeypatch.setattr(mcp_server.repository, "add_memory", lambda *a, **k: True)
+    result = mcp_server.add_memory("korpus", "a repo link", kind="link")
+    assert result == {"status": "saved", "message": ""}
+
+
+def test_add_memory_reports_unknown_project_with_a_message_key(monkeypatch):
+    monkeypatch.setattr(mcp_server.repository, "add_memory", lambda *a, **k: False)
+    result = mcp_server.add_memory("bogus-project", "x")
+    assert result["status"] == "unknown_project"
+    assert "bogus-project" in result["message"]

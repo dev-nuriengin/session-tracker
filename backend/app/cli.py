@@ -303,7 +303,7 @@ def guidance(
 ):
     """Print one of a project's guidance documents."""
     result = guidance_mod.get(project, doc)
-    if result["status"] in ("unknown_project", "not_scaffolded", "unknown_doc"):
+    if result["status"] in ("unknown_project", "not_scaffolded", "unknown_doc", "invalid_slug"):
         typer.echo(result["message"])  # `text` is None on every failure — see Task 2's amendment
         raise typer.Exit(1)
     if result["status"] == "template":
@@ -320,7 +320,7 @@ def decide(
 ):
     """Record a decision, and its reasoning, in the project's decisions log."""
     result = guidance_mod.add_decision(project, decision, because, rejected)
-    if result["status"] in ("unknown_project", "not_scaffolded"):
+    if result["status"] in ("unknown_project", "not_scaffolded", "invalid_slug"):
         typer.echo(result["message"])
         raise typer.Exit(1)
     typer.echo(f"✓ decision recorded in {result['path']}")
