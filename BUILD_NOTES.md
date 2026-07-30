@@ -41,6 +41,8 @@ slice you're actually working. Extras: on-request **standup/summary** reports; a
 **Principle: NO OVERLAP.** Each datum has exactly ONE home, so there is never a sync
 conflict. DB owns **state + events**; files own **guidance** (durable human knowledge);
 pgvector is a **derived** search index over both — rebuildable, never a source of truth.
+*(Design intent. Shipped today: session logs only. Extending it to guidance files is still
+open — see "Implementation delta" below.)*
 
 **One-line routing test:** *a fact that happened / current state* → **DB**; *durable
 knowledge a human writes & edits* → **File**.

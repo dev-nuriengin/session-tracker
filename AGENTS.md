@@ -29,7 +29,8 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
 - **Hybrid storage (LOCKED design).** No-overlap rule:
   **DB** owns *state* (items, status, logs, embeddings); **per-project guidance files**
   (arch/way-of-work/decisions, vendor-neutral names) own *durable human knowledge*;
-  **pgvector** is a derived search index over both. Full spec in `BUILD_NOTES.md` →
+  **pgvector** is a derived search index over both *by design — today it covers session
+  logs only; guidance files are not indexed yet, so `search` will not find them*. Full spec in `BUILD_NOTES.md` →
   "LOCKED DESIGN — Storage model". *(`trackden onboard` scaffolds the files layer to
   `~/.trackden`; guidance is readable over MCP via `get_guidance`, and decisions are
   recorded with `add_decision` — but `update_guidance` does not exist yet: editing the

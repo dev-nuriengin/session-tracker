@@ -9,6 +9,47 @@
 >
 > Rules: `[x]` done, `[ ]` not. The **first `[ ]` item is NEXT.**
 
+## ▸ Start here — 30-second orientation
+
+**What Trackden is:** a local, private memory of your work. It does not do work. AI agents
+plug into it over MCP so they know where everything stands without you re-explaining.
+
+**What works today, as commands you can actually type:**
+
+| | |
+|---|---|
+| `trackden onboard` | Bring a project in. Reads a repo, offers to import its checklist behind a y/n/edit gate, scaffolds guidance in `~/.trackden`. Never writes to your repo. |
+| `trackden list` · `show <p>` · `status <p>` | See what you have and what's next. |
+| `trackden add-item <p> "…"` · `log` · `remember` | Add work, save progress, store a link or note. |
+| `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
+| `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
+| `trackden ask "…"` | Semantic search across every project's session logs. |
+
+**What agents get over MCP:** `overview` (call first — cheap), `get_history`, `list_items`,
+`list_memory`, `get_guidance`, `whats_next`, `search`, `save_progress`, `add_memory`,
+`add_decision`, `list_projects`.
+
+**Where things live — one home per fact.** DB owns *state* (projects, items, statuses,
+session logs). Files under `~/.trackden/projects/<slug>/` own *guidance* (way-of-work,
+architecture, decisions). `_tracker.md` in that folder is a **generated mirror** of the DB —
+never hand-edit it. pgvector is a derived index, never a source.
+
+**Three behaviours worth knowing** (they were deliberate decisions, not accidents):
+
+1. **Declining an import is safe.** Say `n` at the gate, read the file yourself, run
+   `onboard` again — it offers the same items again. Import only happens while a project
+   has no items, so re-running can never duplicate them.
+2. **Guidance files are never a source of items.** Your repo's `CLAUDE.md` seeds
+   `_way-of-work.md` and nothing else, so the same checklist can't land in two places.
+3. **Decisions go to a file, not the DB.** `add_memory` accepts `link | note | transcript`
+   and *rejects* `decision`, pointing you at `add_decision` / `trackden decide`.
+
+**What still needs a human:** editing `_way-of-work.md` / `_arch.md` (no `update_guidance`
+tool yet — agents can read them, not write them) · anything in "NEXT (optional / future)".
+
+**Run it:** `docker compose up -d` · then `cd backend && uv run trackden …`. The core makes
+**zero LLM calls** — no API key needed. Only the optional brain (`eval`, `/graph`) uses one.
+
 ## What we're building (locked idea — 2026-07-17)
 
 **Trackden = a local, private brain / memory for all your work.** It holds the
@@ -21,6 +62,8 @@ It *remembers* work.
 - **Behavior:** captures progress behind the scenes (pulls *"what's your progress?"* and
   saves it) · holds **concrete memory** (decisions, repo links, meeting/decision notes) ·
   guarantees **continuity** (a new session/CLI pulls the item's history first).
+  *(Where that memory lives was settled later: decisions → `_decisions.md`; links, notes
+  and transcripts → the DB `memory` table. See "Start here" above.)*
 - **One core, three doors:** core = **local Postgres (+pgvector)** (single source of
   truth); doors = **MCP** (agents — the heart) · **CLI** (`trackden`) · **web** (local view).
 - **Privacy:** all DATA is **local & private, never public.** Optional cloud store later,
