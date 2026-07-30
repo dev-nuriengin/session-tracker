@@ -31,8 +31,9 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
   (arch/way-of-work/decisions, vendor-neutral names) own *durable human knowledge*;
   **pgvector** is a derived search index over both. Full spec in `BUILD_NOTES.md` →
   "LOCKED DESIGN — Storage model". *(`trackden onboard` scaffolds the files layer to
-  `~/.trackden` today; it is not yet exposed as an MCP tool — only DB state travels
-  over MCP so far.)*
+  `~/.trackden`; guidance is readable over MCP via `get_guidance`, and decisions are
+  recorded with `add_decision` — but `update_guidance` does not exist yet: editing the
+  rules or architecture themselves is still a human action on the file.)*
 - **One core, three doors.** Doors = **MCP** (agents, primary — the heart), **CLI**
   (`trackden`), **web** (local view).
 - **Continuity is the point:** a new session/CLI **pulls the item's history first** —
@@ -75,10 +76,12 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
 
 **Guidance lives centrally, not in the repo.** A project's `_way-of-work.md`, `_arch.md`
 and `_decisions.md` live in `~/.trackden/projects/<slug>/` — `trackden onboard` puts them
-there. Read them directly from disk; they are not yet exposed as an MCP tool, so only
-DB-backed state (items, memory, logs) travels over MCP today. Repos are never modified by
-Trackden. The `_tracker.md` in that folder is a **generated mirror** of the DB; do not
-hand-edit it.
+there. Agents read them over MCP via `get_guidance` (one document per call: `way-of-work`
+| `arch` | `decisions`) and record new decisions with `add_decision`, the only guidance
+write that exists — there is **no `update_guidance`**: editing the rules or architecture
+themselves is still a human action on the file, not something an agent can do. Repos are
+never modified by Trackden. The `_tracker.md` in that folder is a **generated mirror** of
+the DB; do not hand-edit it.
 
 ## Run
 

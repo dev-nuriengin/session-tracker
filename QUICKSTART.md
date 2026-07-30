@@ -98,10 +98,12 @@ restart so it loads). Your agent now has these tools:
 | `overview` | call this FIRST for a project — compact summary, not a full dump |
 | `get_history` | pull a project's history **first when resuming** — never start blind |
 | `list_items` | drill-down: a project's items (open only unless asked for done too) |
-| `list_memory` | drill-down: a project's durable memory (decisions, links, notes) |
+| `list_memory` | drill-down: a project's durable memory (links, notes, transcripts) |
+| `get_guidance` | read the project's rules / architecture / decisions — one doc per call |
 | `whats_next` | suggested next steps |
 | `save_progress` | capture what was done, behind the scenes |
-| `add_memory` | store a decision / repo link / note |
+| `add_memory` | store a repo link, note, or meeting transcript |
+| `add_decision` | record a decision **and why**, into the project's decisions log |
 | `search` | semantic search across all session logs |
 
 > 💡 Try it: ask your agent *"what's the history of my-first-project?"* — it calls

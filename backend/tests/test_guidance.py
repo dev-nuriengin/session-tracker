@@ -91,3 +91,23 @@ def test_add_decision_appends_and_reports_appended(home, known_project):
 def test_add_decision_never_scaffolds(home, known_project):
     add_decision("p", "d", "b")
     assert not guidance_path("p", "decisions").exists()
+
+
+@pytest.mark.db
+def test_guidance_end_to_end_against_the_real_repository(home, temp_slug):
+    """No fakes: real DB row, real workspace, real orchestrator."""
+    from app import repository
+
+    assert repository.create_project(temp_slug, name="E2E Project") is True
+    scaffold_project(temp_slug, name="E2E Project")
+
+    fresh = get(temp_slug, "decisions")
+    assert fresh["status"] == "template"
+
+    appended = add_decision(temp_slug, "Use fastembed", "keeps the core keyless")
+    assert appended["status"] == "appended"
+
+    after = get(temp_slug, "decisions")
+    assert after["status"] == "filled"
+    assert "Use fastembed" in after["text"]
+    assert "- **Because:** keeps the core keyless" in after["text"]

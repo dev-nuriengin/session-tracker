@@ -29,6 +29,18 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
+### ✅ DONE — the guidance path (shipped 2026-07-30)
+
+Guidance (way-of-work / architecture / decisions) is now readable and appendable over
+every door, not just from disk: `workspace.py`'s read path → `guidance.py` orchestrator
+(status vocabulary, never raises) → MCP tools `get_guidance` / `add_decision` → CLI
+`trackden guidance` / `trackden decide`. The DB `memory` table narrowed to
+`link | note | transcript` — decisions live in `_decisions.md` only. One real
+end-to-end test (`@pytest.mark.db`, no fakes) exercises the whole path against the
+actual repository and workspace. Spec: `BUILD_NOTES.md` → "LOCKED DESIGN — Storage
+model". See Phase 12 below for exactly what shipped and what's still deliberately
+deferred.
+
 ### ✅ DONE — `trackden onboard` (shipped 2026-07-29)
 
 Onboarding shipped end-to-end: read-only repo scan → review gate (y/n/edit, defaults to
@@ -37,15 +49,17 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT:** nothing queued. Pick from Phase 11's deferred items (launcher/alias, agent-driven
-onboard as an MCP tool) or from "NEXT (optional / future)" below.
+**▸ NEXT:** nothing queued. Pick from Phase 12's deferred items (`update_guidance`,
+`set_status`, indexing guidance in `search`, cwd→project resolution), Phase 11's
+(launcher/alias, agent-driven onboard as an MCP tool), or "NEXT (optional / future)" below.
 
 ---
 
-**Status:** 33 / 37 — **ALL CORE PHASES DONE (0–11).** The 4 open items are
+**Status:** 39 / 47 — **ALL CORE PHASES DONE (0–12).** The 8 open items are
 explicitly-deferred future refinements: Phase 7 optional cloud store, Phase 8
 hybrid+rerank, Phase 11 launcher/alias for agents, Phase 11 agent-driven onboard as an
-MCP tool.
+MCP tool, Phase 12 `update_guidance`, Phase 12 `set_status`, Phase 12 guidance indexed in
+`search`, Phase 12 cwd→project resolution.
 
 **Build complete.** The whole product exists: local Postgres core → three doors (MCP · CLI
 · web), summary-first, private, provider-swappable, with RAG + eval + opt-in observability,
@@ -147,3 +161,15 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] pytest enters the repo for the first time (81 tests); DB-marked tests auto-skip when Postgres is unreachable
 - [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
 - [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)
+
+## Phase 12 — Guidance path: read + one write, over every door ✅
+- [x] `workspace.py`: `GUIDANCE_DOCS` (the one mapping read and write share) + the read path — `guidance_path`, `read_guidance` (`None` when not scaffolded, never creates), `is_template` (untouched-scaffolding check), `append_decision` (append-only, refuses to scaffold a missing folder)
+- [x] `guidance.py` orchestrator: `get(project, doc="way-of-work")` and `add_decision(project, decision, because, rejected=None)` — a `status` vocabulary (`filled` · `template` · `not_scaffolded` · `unknown_project` · `unknown_doc` · `appended`) instead of exceptions crossing the MCP boundary
+- [x] MCP tools `get_guidance` and `add_decision` (`mcp_server.py`)
+- [x] CLI commands `trackden guidance <project> [--doc]` and `trackden decide <project> <decision> --because [--rejected]` (`cli.py`)
+- [x] `repository.MEMORY_KINDS` narrows the `memory` table to `link | note | transcript`; `add_memory` raises `ValueError` outside it — `remember` (CLI) and `add_memory` (MCP) both catch it and exit/return non-success rather than crash
+- [x] One real end-to-end test (`@pytest.mark.db`, `test_guidance.py`) against the actual repository and workspace, no fakes — closes the gap the onboarding branch's migration bug exposed
+- [ ] Deferred: `update_guidance` (editing rules/architecture from an agent) — still a human action on the file
+- [ ] Deferred: `set_status` as an MCP tool (an agent flipping an item to blocked/parked/etc.)
+- [ ] Deferred: `search` does not index guidance files yet — semantic search still covers session logs only
+- [ ] Deferred: cwd→project resolution — every door still takes an explicit project/slug

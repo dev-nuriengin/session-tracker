@@ -71,10 +71,10 @@ behind the tool, so routing can't go wrong and stays agnostic. Tool descriptions
 | "I made progress" | `save_progress` | → DB log |
 | "This item is now blocked" | `set_status` | → DB |
 | "New ticket / folder / project" | `add_item` / `add_folder` / `add_project` | → DB |
-| "We decided X" | `add_decision` | → file `_decisions.md` |
-| "Update the rules / arch" | `update_guidance` | → guidance file |
+| "We decided X" | `add_decision` — **shipped** | → file `_decisions.md` |
+| "Update the rules / arch" | `update_guidance` (not built — human edits the file) | → guidance file |
 | "Where are we?" | `overview` / `get_history` | ← DB summary **+ file pointers** (summary-first) |
-| "Show the project's rules" | `get_guidance` | ← guidance files (agnostic delivery) |
+| "Show the project's rules" | `get_guidance` — **shipped** | ← guidance files (agnostic delivery) |
 | "Find where we discussed Y" | `search` | ← pgvector over logs **+** files |
 
 ### Backup
@@ -93,10 +93,11 @@ behind the tool, so routing can't go wrong and stays agnostic. Tool descriptions
 
 ### Implementation delta (from current code)
 
-- Current `add_memory` writes decisions/notes to the DB `memory` table. **New:**
-  `add_decision` writes to `_decisions.md`; the DB `memory` table narrows to
-  **structured links/metadata only** (or is deprecated). Reconcile in the storage phase.
-- New tools to add: `set_status`, `add_decision`, `update_guidance`, `get_guidance`.
+- **Shipped:** the DB `memory` table narrowed to **`link | note | transcript`**
+  (`repository.MEMORY_KINDS`) — `add_memory` rejects a `decision` kind with a
+  `ValueError`. Decisions instead go through `add_decision`, which appends to
+  `_decisions.md`, so each fact keeps exactly one home.
+- New tools to add: `set_status`, `update_guidance`.
 - New: per-project **wrapper-folder scaffolder** (feeds the onboarding flow, #2).
 - `search` must also embed & index **guidance files**, not just logs.
 
