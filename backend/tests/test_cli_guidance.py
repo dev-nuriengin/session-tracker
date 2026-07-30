@@ -42,33 +42,36 @@ def test_guidance_flags_an_untouched_template(monkeypatch):
 
 
 def test_guidance_exits_non_zero_when_not_scaffolded(monkeypatch):
+    # A message no plausible hardcoded fallback would ever say verbatim — if `guidance`
+    # stopped reading result["message"] and printed its own copy instead, this exact
+    # string would not appear and the test would fail.
+    sentinel = "TESTSENTINEL-not-scaffolded-b7f1 (guidance/korpus)"
     monkeypatch.setattr(
         guidance_mod, "get",
         lambda project, doc="way-of-work": {
             "project": project, "doc": doc, "path": None,
             "status": "not_scaffolded", "text": None,
-            "message": "run `trackden onboard korpus` (safe to re-run)",
+            "message": sentinel,
         },
     )
     result = runner.invoke(app, ["guidance", "korpus"])
     assert result.exit_code == 1
-    assert "onboard" in result.output
+    assert sentinel in result.output
 
 
 def test_guidance_exits_non_zero_for_an_unknown_doc(monkeypatch):
+    sentinel = "TESTSENTINEL-unknown-doc-c92e (guidance/korpus/bogus)"
     monkeypatch.setattr(
         guidance_mod, "get",
         lambda project, doc="way-of-work": {
             "project": project, "doc": doc, "path": None,
             "status": "unknown_doc", "text": None,
-            "message": f"unknown doc {doc!r} — try one of: way-of-work, arch, decisions",
+            "message": sentinel,
         },
     )
     result = runner.invoke(app, ["guidance", "korpus", "--doc", "bogus"])
     assert result.exit_code == 1
-    assert "way-of-work" in result.output
-    assert "arch" in result.output
-    assert "decisions" in result.output
+    assert sentinel in result.output
 
 
 def test_decide_appends_and_reports_the_path(monkeypatch):
@@ -99,33 +102,34 @@ def test_decide_requires_because():
 
 
 def test_decide_exits_non_zero_when_not_scaffolded(monkeypatch):
+    # Sentinel, not the natural wording the old hardcoded branch used to print — a
+    # fake that happens to reproduce that removed copy verbatim would pass whether
+    # or not `decide` actually reads result["message"], which defeats the point.
+    sentinel = "TESTSENTINEL-not-scaffolded-9d4a (decide/korpus)"
     monkeypatch.setattr(
         guidance_mod, "add_decision",
         lambda project, decision, because, rejected=None: {
             "project": project, "path": "/w/_decisions.md", "status": "not_scaffolded",
-            "message": (
-                "no guidance folder for 'korpus' yet — run `trackden onboard korpus` "
-                "(safe to re-run) to scaffold it"
-            ),
+            "message": sentinel,
         },
     )
     result = runner.invoke(app, ["decide", "korpus", "d", "--because", "b"])
     assert result.exit_code == 1
-    assert "onboard" in result.output
-    assert "no guidance folder for 'korpus'" in result.output
+    assert sentinel in result.output
 
 
 def test_decide_exits_non_zero_for_an_unknown_project(monkeypatch):
+    sentinel = "TESTSENTINEL-unknown-project-e61f (decide/bogus-project)"
     monkeypatch.setattr(
         guidance_mod, "add_decision",
         lambda project, decision, because, rejected=None: {
             "project": project, "path": None, "status": "unknown_project",
-            "message": f"unknown project {project!r}",
+            "message": sentinel,
         },
     )
     result = runner.invoke(app, ["decide", "bogus-project", "d", "--because", "b"])
     assert result.exit_code == 1
-    assert "bogus-project" in result.output
+    assert sentinel in result.output
 
 
 def test_remember_rejects_the_decision_kind_pointing_at_decide(monkeypatch):
