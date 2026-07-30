@@ -133,3 +133,8 @@ def test_add_memory_rejects_an_unknown_kind(temp_slug):
     repository.create_project(temp_slug)
     with pytest.raises(ValueError):
         repository.add_memory(temp_slug, "x", kind="nonsense")
+
+
+@pytest.mark.db
+def test_add_memory_returns_false_for_an_unknown_project():
+    assert repository.add_memory("no-such-project-xyz", "x", kind="note") is False

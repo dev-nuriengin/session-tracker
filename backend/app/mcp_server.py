@@ -10,7 +10,7 @@ Wire into Claude Code via the repo's `.mcp.json`.
 
 from mcp.server.fastmcp import FastMCP
 
-from . import repository
+from . import guidance, repository
 
 mcp = FastMCP("trackden")
 
@@ -41,6 +41,29 @@ def list_memory(project: str) -> list[dict]:
     """Drill-down: the project's durable memory (decisions, links, notes).
     Use AFTER overview, only when you need the details."""
     return repository.list_memory(project)
+
+
+@mcp.tool()
+def get_guidance(project: str, doc: str = "way-of-work") -> dict:
+    """The project's durable GUIDANCE — how it is worked on, its architecture, its
+    decisions. Read `way-of-work` FIRST when you start on a project: it is the human's
+    rules for this codebase. One document per call, so you never pay for what you are
+    not using. doc: way-of-work | arch | decisions.
+    `status` tells you what you got: filled (real content) · template (untouched
+    boilerplate, don't over-read it) · not_scaffolded · unknown_project · unknown_doc."""
+    return guidance.get(project, doc)
+
+
+@mcp.tool()
+def add_decision(
+    project: str, decision: str, because: str, rejected: str | None = None
+) -> dict:
+    """Record a DECISION and its reasoning into the project's decisions log — use this
+    whenever a choice gets made ("we decided X because Y"). `because` is required: a
+    decision without its reason is worthless to the next session. `rejected` is the
+    alternative you turned down, if there was one. This writes to the guidance file,
+    NOT the memory table — for links and notes use add_memory instead."""
+    return guidance.add_decision(project, decision, because, rejected)
 
 
 @mcp.tool()
@@ -78,10 +101,16 @@ def add_memory(
     kind: str = "note",
     title: str | None = None,
     url: str | None = None,
-) -> bool:
-    """Save a durable fact to the project's memory — a decision, a repo link, a note,
-    a meeting/decision transcript. kind: decision | link | note | transcript."""
-    return repository.add_memory(project, content, kind=kind, title=title, url=url)
+) -> dict:
+    """Save a durable fact to the project's memory — a repo link, a note, a meeting
+    transcript. kind: link | note | transcript.
+    NOT for decisions: those go to add_decision, which writes them to the project's
+    decisions guidance file so each fact has exactly one home."""
+    try:
+        saved = repository.add_memory(project, content, kind=kind, title=title, url=url)
+    except ValueError as exc:
+        return {"status": "rejected_kind", "message": str(exc)}
+    return {"status": "saved" if saved else "unknown_project"}
 
 
 if __name__ == "__main__":

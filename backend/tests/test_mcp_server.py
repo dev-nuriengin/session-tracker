@@ -25,3 +25,47 @@ def test_get_history_delegates_to_repository_with_project_and_limit(monkeypatch)
 
     assert calls == [("my-first-project", 3)]
     assert result == {"project": "my-first-project", "open_items": [], "memory": [], "recent_logs": []}
+
+
+def test_get_guidance_is_registered():
+    assert mcp_server.mcp._tool_manager.get_tool("get_guidance") is not None
+
+
+def test_add_decision_is_registered():
+    assert mcp_server.mcp._tool_manager.get_tool("add_decision") is not None
+
+
+def test_get_guidance_delegates_to_guidance(monkeypatch):
+    seen = {}
+
+    def fake_get(project, doc="way-of-work"):
+        seen["args"] = (project, doc)
+        return {"status": "filled", "text": "rules"}
+
+    monkeypatch.setattr(mcp_server.guidance, "get", fake_get)
+    result = mcp_server.get_guidance("korpus", doc="arch")
+    assert seen["args"] == ("korpus", "arch")
+    assert result["status"] == "filled"
+
+
+def test_add_decision_delegates_to_guidance(monkeypatch):
+    seen = {}
+
+    def fake_add(project, decision, because, rejected=None):
+        seen["args"] = (project, decision, because, rejected)
+        return {"status": "appended"}
+
+    monkeypatch.setattr(mcp_server.guidance, "add_decision", fake_add)
+    result = mcp_server.add_decision("korpus", "chose X", "because Y", "not Z")
+    assert seen["args"] == ("korpus", "chose X", "because Y", "not Z")
+    assert result["status"] == "appended"
+
+
+def test_add_memory_reports_a_rejected_kind_instead_of_raising(monkeypatch):
+    def fake_add_memory(*args, **kwargs):
+        raise ValueError("unsupported memory kind 'decision' — use `add_decision`")
+
+    monkeypatch.setattr(mcp_server.repository, "add_memory", fake_add_memory)
+    result = mcp_server.add_memory("korpus", "we chose X", kind="decision")
+    assert result["status"] == "rejected_kind"
+    assert "add_decision" in result["message"]
