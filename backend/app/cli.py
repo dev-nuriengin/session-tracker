@@ -10,6 +10,7 @@ from pathlib import Path
 
 import typer
 
+from . import guidance as guidance_mod
 from . import onboard as onboard_mod
 from . import repository
 from .db import init_db
@@ -125,12 +126,16 @@ def add_item(project: str, title: str, folder: int = typer.Option(None, help="Fo
 def remember(
     project: str,
     content: str,
-    kind: str = typer.Option("note", help="decision | link | note | transcript"),
+    kind: str = typer.Option("note", help="link | note | transcript"),
     url: str = typer.Option(None, help="Link (e.g. GitLab/GitHub)"),
     title: str = typer.Option(None),
 ):
-    """Save a durable fact (decision / link / note) to a project's memory."""
-    ok = repository.add_memory(project, content, kind=kind, title=title, url=url)
+    """Save a durable fact (link / note / transcript) to a project's memory. For a decision use `trackden decide`."""
+    try:
+        ok = repository.add_memory(project, content, kind=kind, title=title, url=url)
+    except ValueError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(1)
     typer.echo("✓ saved to memory" if ok else f"unknown project '{project}'")
 
 
@@ -286,6 +291,42 @@ def onboard(
     if not result.git_ready:
         typer.echo("  ⚠ workspace is not a git repo (git unavailable) — guidance is unversioned")
     typer.echo(f"\nNext:  trackden show {result.slug}")
+
+
+@app.command()
+def guidance(
+    project: str,
+    doc: str = typer.Option("way-of-work", help="way-of-work | arch | decisions"),
+):
+    """Print one of a project's guidance documents."""
+    result = guidance_mod.get(project, doc)
+    if result["status"] in ("unknown_project", "not_scaffolded", "unknown_doc"):
+        typer.echo(result["message"])  # `text` is None on every failure — see Task 2's amendment
+        raise typer.Exit(1)
+    if result["status"] == "template":
+        typer.echo(f"({doc} is still the untouched template — {result['path']})\n")
+    typer.echo(result["text"])
+
+
+@app.command()
+def decide(
+    project: str,
+    decision: str,
+    because: str = typer.Option(..., help="Why this was chosen (required)"),
+    rejected: str = typer.Option(None, help="The alternative you turned down"),
+):
+    """Record a decision, and its reasoning, in the project's decisions log."""
+    result = guidance_mod.add_decision(project, decision, because, rejected)
+    if result["status"] == "unknown_project":
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+    if result["status"] == "not_scaffolded":
+        typer.echo(
+            f"no guidance folder for '{project}' yet — run `trackden onboard {project}` "
+            "(safe to re-run) to scaffold it"
+        )
+        raise typer.Exit(1)
+    typer.echo(f"✓ decision recorded in {result['path']}")
 
 
 if __name__ == "__main__":

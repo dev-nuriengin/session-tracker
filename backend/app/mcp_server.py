@@ -46,9 +46,9 @@ def list_memory(project: str) -> list[dict]:
 @mcp.tool()
 def get_guidance(project: str, doc: str = "way-of-work") -> dict:
     """The project's durable GUIDANCE — how it is worked on, its architecture, its
-    decisions. Read `way-of-work` FIRST when you start on a project: it is the human's
-    rules for this codebase. One document per call, so you never pay for what you are
-    not using. doc: way-of-work | arch | decisions.
+    decisions. Read `way-of-work` after `overview`, before you change anything: it is
+    the human's rules for this codebase. One document per call, so you never pay for
+    what you are not using. doc: way-of-work | arch | decisions.
     `status` tells you what you got: filled (real content) · template (untouched
     boilerplate, don't over-read it) · not_scaffolded · unknown_project · unknown_doc."""
     return guidance.get(project, doc)
@@ -62,7 +62,8 @@ def add_decision(
     whenever a choice gets made ("we decided X because Y"). `because` is required: a
     decision without its reason is worthless to the next session. `rejected` is the
     alternative you turned down, if there was one. This writes to the guidance file,
-    NOT the memory table — for links and notes use add_memory instead."""
+    NOT the memory table — for links and notes use add_memory instead.
+    `status` tells you what you got: appended · not_scaffolded · unknown_project."""
     return guidance.add_decision(project, decision, because, rejected)
 
 
@@ -105,7 +106,8 @@ def add_memory(
     """Save a durable fact to the project's memory — a repo link, a note, a meeting
     transcript. kind: link | note | transcript.
     NOT for decisions: those go to add_decision, which writes them to the project's
-    decisions guidance file so each fact has exactly one home."""
+    decisions guidance file so each fact has exactly one home.
+    `status` tells you what you got: saved · unknown_project · rejected_kind."""
     try:
         saved = repository.add_memory(project, content, kind=kind, title=title, url=url)
     except ValueError as exc:
