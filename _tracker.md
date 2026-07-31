@@ -44,8 +44,15 @@ never hand-edit it. pgvector is a derived index, never a source.
 3. **Decisions go to a file, not the DB.** `add_memory` accepts `link | note | transcript`
    and *rejects* `decision`, pointing you at `add_decision` / `trackden decide`.
 
+**What does NOT work yet — know this before you rely on it:** you **cannot mark an item
+done**. No door can change an item's status (no `set_status` anywhere), so `whats_next` and
+`trackden status` will keep returning the same item for ever. Use it to *hold* work and
+serve it to agents; do not expect it to track progress until `set_status` lands. See
+"▸ NEXT" below.
+
 **What still needs a human:** editing `_way-of-work.md` / `_arch.md` (no `update_guidance`
-tool yet — agents can read them, not write them) · anything in "NEXT (optional / future)".
+tool yet — agents can read them, not write them) · removing a project (no `trackden delete`)
+· anything in "NEXT (optional / future)".
 
 **Run it:** `docker compose up -d` · then `cd backend && uv run trackden …`. The core makes
 **zero LLM calls** — no API key needed. Only the optional brain (`eval`, `/graph`) uses one.
@@ -92,17 +99,40 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT:** nothing queued. Pick from Phase 12's deferred items (`update_guidance`,
-`set_status`, indexing guidance in `search`, cwd→project resolution), Phase 11's
-(launcher/alias, agent-driven onboard as an MCP tool), or "NEXT (optional / future)" below.
+**▸ NEXT — `set_status`. This one is a blocker, not a refinement.**
+
+Nothing anywhere can change an item's status. There is no `set_status`, `mark_done` or
+equivalent in `repository.py`, the CLI or the MCP server — verified 2026-07-31 by grep. An
+item is created `todo` and stays `todo` for ever. Consequences: `whats_next` returns the
+same item indefinitely, `trackden status` shows the same NEXT for ever, and the generated
+`_tracker.md` mirror never moves. You can record *that you worked* (`log` / `save_progress`)
+but never that something is **finished**.
+
+So Trackden can hold work and serve it to agents, but cannot track progress through it —
+the core loop. It sat on the deferred list looking like a nice-to-have; it is the one gap
+that stops daily use. Small to build: one repository function, one MCP tool, one CLI
+command. `models.py` already names the five statuses; only `todo` and `done` are ever
+written, and `done` only by an import.
+
+**Then, in order:** launcher/alias so agents call MCP *first* without being told (Phase 11)
+— today continuity depends on you remembering to say "check Trackden" · `trackden delete`
+(no way to remove a project; three findings in the last two branches were made worse by its
+absence) · then dogfooding becomes real: onboard this repo into itself, tick items through
+the tool instead of by hand, retire this file.
 
 ---
 
-**Status:** 39 / 47 — **ALL CORE PHASES DONE (0–12).** The 8 open items are
-explicitly-deferred future refinements: Phase 7 optional cloud store, Phase 8
-hybrid+rerank, Phase 11 launcher/alias for agents, Phase 11 agent-driven onboard as an
-MCP tool, Phase 12 `update_guidance`, Phase 12 `set_status`, Phase 12 guidance indexed in
-`search`, Phase 12 cwd→project resolution.
+**Status:** 39 / 47 — all phases 0–12 have shipped their core. **But "phases done" ≠ "usable
+day to day":** of the 8 open items, **one is a blocker** and the rest are genuine
+refinements. Do not read this line as "finished".
+
+- 🔴 **Phase 12 `set_status` — BLOCKER.** No door can change an item's status; see
+  "▸ NEXT" above. Without it the tracker cannot track progress.
+- 🟡 **Phase 11 launcher/alias** — not a blocker, but it is what makes continuity automatic
+  instead of dependent on you remembering to mention Trackden.
+- Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
+  · Phase 11 agent-driven onboard as an MCP tool · Phase 12 `update_guidance` · Phase 12
+  guidance indexed in `search` · Phase 12 cwd→project resolution.
 
 **Build complete.** The whole product exists: local Postgres core → three doors (MCP · CLI
 · web), summary-first, private, provider-swappable, with RAG + eval + opt-in observability,
@@ -216,6 +246,6 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `repository.MEMORY_KINDS` narrows the `memory` table to `link | note | transcript`; `add_memory` raises `ValueError` outside it — `remember` (CLI) and `add_memory` (MCP) both catch it and exit/return non-success rather than crash
 - [x] One real end-to-end test (`@pytest.mark.db`, `test_guidance.py`) against the actual repository and workspace, no fakes — closes the gap the onboarding branch's migration bug exposed
 - [ ] Deferred: `update_guidance` (editing rules/architecture from an agent) — still a human action on the file
-- [ ] Deferred: `set_status` as an MCP tool (an agent flipping an item to blocked/parked/etc.)
+- [ ] 🔴 **BLOCKER — `set_status`, on every door.** Not "an agent flipping a status": *nothing* can change one. No `set_status`/`mark_done` in `repository.py`, `cli.py` or `mcp_server.py` (verified by grep 2026-07-31). Items are born `todo` and stay `todo`; `done` only ever arrives via an import. `models.py` documents five statuses, code writes two. This is the core loop — build it before anything else here.
 - [ ] Deferred: `search` does not index guidance files yet — semantic search still covers session logs only
 - [ ] Deferred: cwd→project resolution — every door still takes an explicit project/slug
