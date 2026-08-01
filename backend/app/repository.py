@@ -280,7 +280,9 @@ def _vocabulary(db, project_id: int) -> dict[str, str]:
     extras = {
         row.name: row.behaves_as
         for row in db.scalars(
-            select(models.ItemStatus).where(models.ItemStatus.project_id == project_id)
+            select(models.ItemStatus)
+            .where(models.ItemStatus.project_id == project_id)
+            .order_by(models.ItemStatus.id)
         ).all()
     }
     return st.resolve(extras)
