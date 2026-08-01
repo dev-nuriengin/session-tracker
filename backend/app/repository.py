@@ -306,6 +306,44 @@ def closed_names(slug: str) -> frozenset[str]:
         return st.names_in(st.CLOSED, extra=_vocabulary(db, project.id))
 
 
+def set_status(slug: str, item_id: int, status: str) -> dict:
+    """Move one item to a new status. Returns an outcome dict, never raises.
+
+    Deliberately NOT a state machine: any valid name may follow any other, including
+    reopening a closed item. The moment Trackden refuses a transition it stops being
+    memory and starts being an agent. Whether to ASK before closing something is
+    guidance for the caller, not a check here.
+
+    Always reports `from` and `to`, so a caller whose item was moved by another
+    session sees it instead of assuming.
+    """
+    status = status.strip().lower()
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return {"status": "unknown_project"}
+
+        vocabulary = _vocabulary(db, project.id)
+        if status not in vocabulary:
+            return {"status": "unknown_status", "valid": list(vocabulary)}
+
+        item = db.scalar(
+            select(models.Item).where(
+                models.Item.id == item_id, models.Item.project_id == project.id
+            )
+        )
+        if item is None:
+            return {"status": "unknown_item"}
+
+        previous = item.status
+        if previous == status:
+            return {"status": "unchanged", "from": previous, "to": status}
+
+        item.status = status
+        db.commit()
+        return {"status": "set", "from": previous, "to": status}
+
+
 # ---- durable memory (links, notes, transcripts) ----
 
 # Decisions deliberately absent: they belong in the project's `_decisions.md`, not the
