@@ -88,6 +88,23 @@ def temp_slug():
             db.commit()
 
 
+@pytest.fixture
+def temp_slug_b():
+    """A SECOND disposable project slug, for tests that need two (db-marked)."""
+    slug = "pytest-onboard-tmp-b"
+    yield slug
+    from sqlalchemy import select
+
+    from app import models
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug))
+        if project is not None:
+            db.delete(project)  # cascades to folders / items / sessions / memory
+            db.commit()
+
+
 def _server_reachable(admin_url) -> bool:
     from sqlalchemy import create_engine
 

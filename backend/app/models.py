@@ -3,6 +3,7 @@
     projects → folders (nestable) → items          (the work map)
     projects → sessions → session_logs             (what happened, per session)
     projects → memory                              (durable facts: links, notes)
+    projects → item_statuses                       (EXTRA status names, on top of the defaults)
 
 This is Trackden's single source of truth. All doors (MCP, CLI, web) read
 and write these tables; nothing lives in local files. Terminology is
@@ -13,7 +14,7 @@ domain-agnostic — an "item" is a ticket (IT), a bill (accounting), a deliverab
 from datetime import datetime, timezone
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -51,6 +52,9 @@ class Project(Base):
     )
     memory: Mapped[list["Memory"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
+    )
+    statuses: Mapped[list["ItemStatus"]] = relationship(
+        cascade="all, delete-orphan"
     )
 
 
@@ -94,6 +98,25 @@ class Item(Base):
 
     project: Mapped["Project"] = relationship(back_populates="items")
     folder: Mapped["Folder | None"] = relationship(back_populates="items")
+
+
+class ItemStatus(Base):
+    """One EXTRA status name a project may use, and the class it behaves as.
+
+    Additive: `statuses.DEFAULTS` is always valid, so a project with no rows works
+    unchanged and adding `parked` can never invalidate `todo`. That is also why
+    onboarding needs no seeding step — absence of rows is a complete, valid state.
+    """
+
+    __tablename__ = "item_statuses"
+    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_item_status_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(20))
+    # one of statuses.CLASSES — open | active | waiting | closed
+    behaves_as: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Session(Base):

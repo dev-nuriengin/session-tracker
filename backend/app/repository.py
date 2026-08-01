@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select
 
-from . import models
+from . import models, statuses as st
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
 from .db import SessionLocal, init_db
 from .embeddings import embed
@@ -232,6 +232,78 @@ def add_item(slug: str, title: str, folder_id: int | None = None) -> int | None:
         db.add(item)
         db.commit()
         return item.id
+
+
+# ---- the status vocabulary ----
+
+def _vocabulary(db, project_id: int) -> dict[str, str]:
+    """The resolved status vocabulary for one project: defaults + its extras.
+
+    Takes an open session because every caller already has one — this is the hot
+    path for the "open item" queries and must not open a second connection.
+    """
+    extras = {
+        row.name: row.behaves_as
+        for row in db.scalars(
+            select(models.ItemStatus).where(models.ItemStatus.project_id == project_id)
+        ).all()
+    }
+    return st.resolve(extras)
+
+
+def list_statuses(slug: str) -> list[dict]:
+    """Every status name valid for a project, defaults first then its extras.
+
+    Order is deliberate and stable: the shipped names in their declared order, then
+    extras oldest-first. An agent reading this list sees the same thing every time.
+    """
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return []
+        rows = db.scalars(
+            select(models.ItemStatus)
+            .where(models.ItemStatus.project_id == project.id)
+            .order_by(models.ItemStatus.id)
+        ).all()
+        out = [{"name": name, "behaves_as": cls} for name, cls in st.DEFAULTS.items()]
+        out += [{"name": r.name, "behaves_as": r.behaves_as} for r in rows]
+        return out
+
+
+def add_status(slug: str, name: str, behaves_as: str) -> str:
+    """Add one extra status name to a project. Returns an outcome, never raises.
+
+    Outcomes: added · duplicate_name · unknown_class · invalid_name · unknown_project
+    """
+    name = name.strip().lower()
+    if not name:
+        return "invalid_name"
+    if behaves_as not in st.CLASSES:
+        return "unknown_class"
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return "unknown_project"
+        if name in _vocabulary(db, project.id):
+            # covers both "already a shipped default" and "already added here"
+            return "duplicate_name"
+        db.add(models.ItemStatus(project_id=project.id, name=name, behaves_as=behaves_as))
+        db.commit()
+        return "added"
+
+
+def closed_names(slug: str) -> frozenset[str]:
+    """The project's closed-class status names.
+
+    Falls back to the shipped defaults for an unknown project rather than returning
+    an empty set — an empty closed set would make every finished item look open.
+    """
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return st.names_in(st.CLOSED)
+        return st.names_in(st.CLOSED, extra=_vocabulary(db, project.id))
 
 
 # ---- durable memory (links, notes, transcripts) ----
