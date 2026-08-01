@@ -52,3 +52,124 @@ def test_cli_help_does_not_require_the_schema_check(monkeypatch):
 
     assert result.exit_code == 0, result.output
     spy.assert_not_called()
+
+
+def _no_schema(monkeypatch):
+    """Neutralise the app-level init_db callback — these tests never touch Postgres."""
+    monkeypatch.setattr(cli_mod, "init_db", Mock())
+
+
+def test_set_status_reports_the_move(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "set_status",
+        lambda *a, **k: {"status": "set", "from": "todo", "to": "doing"},
+    )
+    result = runner.invoke(cli_mod.app, ["set-status", "acme", "42", "doing"])
+    assert result.exit_code == 0, result.output
+    assert "todo → doing" in result.output
+
+
+def test_set_status_exits_non_zero_on_an_unknown_status(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "set_status",
+        lambda *a, **k: {"status": "unknown_status", "valid": ["todo", "done"]},
+    )
+    result = runner.invoke(cli_mod.app, ["set-status", "acme", "42", "parked"])
+    assert result.exit_code == 1
+    assert "todo" in result.output and "done" in result.output
+
+
+def test_set_status_exits_non_zero_on_an_unknown_item(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "set_status", lambda *a, **k: {"status": "unknown_item"}
+    )
+    assert runner.invoke(cli_mod.app, ["set-status", "acme", "42", "doing"]).exit_code == 1
+
+
+def test_unchanged_is_reported_and_succeeds(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "set_status",
+        lambda *a, **k: {"status": "unchanged", "from": "doing", "to": "doing"},
+    )
+    result = runner.invoke(cli_mod.app, ["set-status", "acme", "42", "doing"])
+    assert result.exit_code == 0, result.output
+    assert "already" in result.output
+
+
+def test_add_status_succeeds(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "add_status", lambda *a, **k: "added")
+    result = runner.invoke(
+        cli_mod.app, ["add-status", "acme", "parked", "--behaves-as", "waiting"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "parked" in result.output
+
+
+def test_add_status_exits_non_zero_on_a_duplicate(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "add_status", lambda *a, **k: "duplicate_name")
+    assert runner.invoke(
+        cli_mod.app, ["add-status", "acme", "done", "--behaves-as", "open"]
+    ).exit_code == 1
+
+
+def test_statuses_lists_names_with_their_class(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "list_statuses",
+        lambda slug: [{"name": "todo", "behaves_as": "open"}],
+    )
+    result = runner.invoke(cli_mod.app, ["statuses", "acme"])
+    assert result.exit_code == 0, result.output
+    assert "todo" in result.output and "open" in result.output
+
+
+def test_statuses_exits_non_zero_for_an_unknown_project(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "list_statuses", lambda slug: [])
+    assert runner.invoke(cli_mod.app, ["statuses", "nope"]).exit_code == 1
+
+
+# ---- the exit-code bug: these printed an error and still exited 0 ----
+
+def test_add_folder_exits_non_zero_for_an_unknown_project(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "create_folder", lambda *a, **k: None)
+    assert runner.invoke(cli_mod.app, ["add-folder", "nope", "Bugs"]).exit_code == 1
+
+
+def test_add_item_exits_non_zero_for_an_unknown_project(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "add_item", lambda *a, **k: None)
+    assert runner.invoke(cli_mod.app, ["add-item", "nope", "Fix it"]).exit_code == 1
+
+
+def test_log_exits_non_zero_for_an_unknown_project(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "add_session_log", lambda *a, **k: False)
+    assert runner.invoke(cli_mod.app, ["log", "nope", "did a thing"]).exit_code == 1
+
+
+def test_show_reports_the_waiting_count(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "overview",
+        lambda slug: {
+            "project": "acme", "next": "a", "open_items": 1, "open_preview": ["a"],
+            "waiting_items": 2, "memory_entries": 0, "last_activity": None,
+            "statuses": [{"name": "todo", "behaves_as": "open"}],
+        },
+    )
+    result = runner.invoke(cli_mod.app, ["show", "acme"])
+    assert result.exit_code == 0, result.output
+    assert "waiting" in result.output and "2" in result.output

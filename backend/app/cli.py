@@ -69,6 +69,7 @@ def show(project: str, full: bool = typer.Option(False, "--full", help="Deep vie
         typer.echo(f"  open items    : {ov['open_items']}")
         for t in ov["open_preview"]:
             typer.echo(f"      • {t}")
+        typer.echo(f"  waiting       : {ov['waiting_items']}")
         typer.echo(f"  memory        : {ov['memory_entries']}")
         typer.echo(f"  last activity : {ov['last_activity'] or '(none)'}")
         typer.echo("  (use --full for all items, memory, logs)")
@@ -112,14 +113,73 @@ def add_project(
 def add_folder(project: str, name: str):
     """Add a folder to a project."""
     fid = repository.create_folder(project, name)
-    typer.echo(f"✓ folder #{fid} added to {project}" if fid else f"unknown project '{project}'")
+    if not fid:
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+    typer.echo(f"✓ folder #{fid} added to {project}")
 
 
 @app.command("add-item")
 def add_item(project: str, title: str, folder: int = typer.Option(None, help="Folder id")):
     """Add a work item to a project (optionally inside a folder)."""
     iid = repository.add_item(project, title, folder_id=folder)
-    typer.echo(f"✓ item #{iid} added to {project}" if iid else f"unknown project '{project}'")
+    if not iid:
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+    typer.echo(f"✓ item #{iid} added to {project}")
+
+
+@app.command("set-status")
+def set_status(project: str, item_id: int, status: str):
+    """Move an item to a new status (see `trackden statuses <project>` for the valid names)."""
+    result = repository.set_status(project, item_id, status)
+    outcome = result["status"]
+    if outcome == "set":
+        typer.echo(f"✓ item #{item_id}: {result['from']} → {result['to']}")
+        return
+    if outcome == "unchanged":
+        typer.echo(f"item #{item_id} is already '{result['to']}'")
+        return
+    if outcome == "unknown_status":
+        typer.echo(f"unknown status '{status}'. valid: {', '.join(result['valid'])}")
+    elif outcome == "unknown_item":
+        typer.echo(f"unknown item #{item_id} in '{project}'")
+    else:
+        typer.echo(f"unknown project '{project}'")
+    raise typer.Exit(1)
+
+
+@app.command("add-status")
+def add_status(
+    project: str,
+    name: str,
+    behaves_as: str = typer.Option(..., "--behaves-as", help="open | active | waiting | closed"),
+):
+    """Add a status name to a project. The four shipped names always stay valid."""
+    outcome = repository.add_status(project, name, behaves_as)
+    if outcome == "added":
+        typer.echo(f"✓ '{name}' added to {project} (behaves as {behaves_as})")
+        return
+    messages = {
+        "duplicate_name": f"'{name}' is already a status in {project}",
+        "unknown_class": f"unknown class '{behaves_as}'. valid: open, active, waiting, closed",
+        "invalid_name": "a status name cannot be blank",
+        "unknown_project": f"unknown project '{project}'",
+    }
+    typer.echo(messages[outcome])
+    raise typer.Exit(1)
+
+
+@app.command()
+def statuses(project: str):
+    """List the status names a project accepts, with the class each behaves as."""
+    rows = repository.list_statuses(project)
+    if not rows:
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+    typer.echo(f"# {project} — statuses")
+    for row in rows:
+        typer.echo(f"  {row['name']:<12} {row['behaves_as']}")
 
 
 @app.command()
@@ -178,7 +238,10 @@ def log(
 ):
     """Save session progress (a step/note) for a project."""
     ok = repository.add_session_log(project, thread, note, kind)
-    typer.echo("✓ logged" if ok else f"unknown project '{project}'")
+    if not ok:
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+    typer.echo("✓ logged")
 
 
 _GATE_PREVIEW = 10  # show at most this many items before asking
