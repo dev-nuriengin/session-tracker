@@ -24,8 +24,9 @@ def list_projects() -> list[str]:
 @mcp.tool()
 def overview(project: str) -> dict:
     """Call this FIRST when you start on a project. A COMPACT summary — next step,
-    open-item count + a few titles, memory count, last activity. It is cheap and does
-    NOT dump everything. Drill deeper with list_items / list_memory only if you need to."""
+    open-item count + a few titles, how many are waiting, memory count, last
+    activity, and the status names this project accepts. It is cheap and does NOT
+    dump everything. Drill deeper with list_items / list_memory only if you need to."""
     return repository.overview(project)
 
 
@@ -34,6 +35,34 @@ def list_items(project: str, include_done: bool = False) -> list[dict]:
     """Drill-down: the project's items (open only unless include_done=true).
     Use AFTER overview, only when you need the full list."""
     return repository.list_items(project, include_done=include_done)
+
+
+@mcp.tool()
+def set_status(project: str, item_id: int, status: str) -> dict:
+    """Move an item to a new status — this is how you record PROGRESS, not just work.
+
+    Set `doing` freely the moment you start on something; no need to ask.
+    Announce a `waiting` change (blocked, parked, …) in one line so the user knows
+    something stalled. ASK before you close anything (`done`, `dropped`) unless the
+    user just told you it is finished — closing hides an item from `whats_next`.
+
+    Only names from `statuses` (in the `overview` payload) are valid; never invent
+    one. If the user's real situation has no matching name, offer to add one rather
+    than forcing their state into the wrong label.
+
+    `status` tells you what happened: set · unchanged · unknown_status (with the
+    `valid` list, so you can correct yourself) · unknown_item · unknown_project.
+    `from` and `to` are always reported, so you can see if someone else moved it."""
+    return repository.set_status(project, item_id, status)
+
+
+@mcp.tool()
+def list_statuses(project: str) -> list[dict]:
+    """The status names this project accepts, each with the class it behaves as:
+    open (not started) · active (being worked on) · waiting (stalled, skipped by
+    whats_next but still counted) · closed (finished or abandoned, hidden).
+    `overview` already includes this — call it only if you need it on its own."""
+    return repository.list_statuses(project)
 
 
 @mcp.tool()

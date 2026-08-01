@@ -82,3 +82,50 @@ def test_add_memory_reports_unknown_project_with_a_message_key(monkeypatch):
     result = mcp_server.add_memory("bogus-project", "x")
     assert result["status"] == "unknown_project"
     assert "bogus-project" in result["message"]
+
+
+def test_set_status_is_registered_as_a_tool():
+    assert mcp_server.mcp._tool_manager.get_tool("set_status") is not None
+
+
+def test_list_statuses_is_registered_as_a_tool():
+    assert mcp_server.mcp._tool_manager.get_tool("list_statuses") is not None
+
+
+def test_set_status_tool_delegates_to_the_repository(monkeypatch):
+    seen = {}
+
+    def fake(slug, item_id, status):
+        seen.update(slug=slug, item_id=item_id, status=status)
+        return {"status": "set", "from": "todo", "to": "doing"}
+
+    monkeypatch.setattr(mcp_server.repository, "set_status", fake)
+    result = mcp_server.set_status("acme", 42, "doing")
+    assert seen == {"slug": "acme", "item_id": 42, "status": "doing"}
+    assert result == {"status": "set", "from": "todo", "to": "doing"}
+
+
+def test_set_status_passes_an_unknown_status_straight_through(monkeypatch):
+    """The valid list must reach the agent so it can self-correct."""
+    monkeypatch.setattr(
+        mcp_server.repository,
+        "set_status",
+        lambda *a, **k: {"status": "unknown_status", "valid": ["todo", "done"]},
+    )
+    assert mcp_server.set_status("acme", 1, "parked")["valid"] == ["todo", "done"]
+
+
+def test_list_statuses_tool_delegates_to_the_repository(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server.repository,
+        "list_statuses",
+        lambda slug: [{"name": "todo", "behaves_as": "open"}],
+    )
+    assert mcp_server.list_statuses("acme") == [{"name": "todo", "behaves_as": "open"}]
+
+
+def test_set_status_docstring_tells_the_agent_to_ask_before_closing():
+    # the graduated-ask rule has to be visible where the agent actually reads
+    text = mcp_server.set_status.__doc__.lower()
+    assert "ask" in text
+    assert "close" in text or "closing" in text
