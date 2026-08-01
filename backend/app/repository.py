@@ -58,12 +58,14 @@ def create_project(slug: str, name: str | None = None, kind: str = "personal",
 
 
 def get_status(slug: str) -> str:
-    """Short status string for a project: its next ACTIONABLE item.
+    """Short status string for a project: its next offerable item.
 
-    Queue: actionable only — "what should I do next", not "what exists". So
-    "actionable" is open-or-active, and an item someone is already on counts as
-    the next step. Waiting items (blocked, parked, …) are skipped but reported —
-    that is what stops a stalled item from blocking the queue for ever.
+    Queue: "what should I do next", not "what exists". A queue offers anything
+    that is not `waiting` and not `closed` — so an item someone is already on
+    counts as the next step, and so does a status this vocabulary cannot
+    classify (offered on purpose, so a human notices and fixes it). Waiting
+    items (blocked, parked, …) are skipped but reported — that is what stops a
+    stalled item from blocking the queue for ever.
     Returns '' if the project is unknown.
     """
     with SessionLocal() as db:
@@ -73,12 +75,12 @@ def get_status(slug: str) -> str:
         if project is None:
             return ""
         vocabulary = _vocabulary(db, project.id)
-        actionable = st.names_in(*st.ACTIONABLE, extra=vocabulary)
+        not_offerable = st.names_in(st.WAITING, st.CLOSED, extra=vocabulary)
         waiting = st.names_in(st.WAITING, extra=vocabulary)
 
         nxt = db.scalar(
             select(models.Item)
-            .where(models.Item.project_id == project.id, models.Item.status.in_(actionable))
+            .where(models.Item.project_id == project.id, models.Item.status.notin_(not_offerable))
             .order_by(models.Item.position, models.Item.id)
         )
         waiting_count = db.scalar(
@@ -97,20 +99,21 @@ def overview(slug: str) -> dict:
     titles + last activity + the valid status vocabulary. Drill deeper with
     list_items / list_memory / get_history.
 
-    Queue: actionable only — its `next`/`open_preview` are "what to do next", not
-    an inventory of everything on the list.
+    Queue: its `next`/`open_preview` are "what to do next", not an inventory of
+    everything on the list — anything not `waiting` and not `closed` qualifies,
+    including a status this vocabulary cannot classify (offered on purpose).
     """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
             return {}
         vocabulary = _vocabulary(db, project.id)
-        actionable = st.names_in(*st.ACTIONABLE, extra=vocabulary)
+        not_offerable = st.names_in(st.WAITING, st.CLOSED, extra=vocabulary)
         waiting = st.names_in(st.WAITING, extra=vocabulary)
 
         open_titles = db.scalars(
             select(models.Item.title)
-            .where(models.Item.project_id == project.id, models.Item.status.in_(actionable))
+            .where(models.Item.project_id == project.id, models.Item.status.notin_(not_offerable))
             .order_by(models.Item.position, models.Item.id)
         ).all()
         waiting_count = db.scalar(

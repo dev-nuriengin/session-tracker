@@ -9,11 +9,6 @@ def test_the_four_classes_are_fixed():
     assert statuses.CLASSES == {"open", "active", "waiting", "closed"}
 
 
-def test_actionable_is_open_plus_active():
-    # what `whats_next` may offer: not started, or already being worked on
-    assert statuses.ACTIONABLE == {"open", "active"}
-
-
 def test_shipped_defaults_map_every_name_to_a_class():
     assert statuses.DEFAULTS == {
         "todo": "open",

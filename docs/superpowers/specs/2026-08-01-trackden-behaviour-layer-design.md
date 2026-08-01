@@ -379,17 +379,30 @@ hand-edited.
 
 Four existing queries define "open" as `status != "done"` — `repository.py:71`, `:88`,
 `:119`, and `:328` (`get_status`, `overview`, `list_items`, `get_history`). With classes,
-"open" must become *"the item's status is not in the closed class"*. Each is a one-line
-change, but it is an edit to working code rather than an addition, and it is where a
-regression would actually hurt. It gets a dedicated regression test (`test_open_semantics.py`).
-`import_items`'s todo/done coercion and the two `tracker_md.py` sites (the parser's todo/done
-inference, the renderer's closed-set check) carry status semantics too, though neither
-hard-codes `!= "done"`, so they sit outside this one non-additive change.
+the four queries split into two different predicates, because they answer two different
+questions:
+
+- **Queue** (`get_status`, `overview` — "what should I do next"): offer anything that is
+  NOT `waiting` and NOT `closed`. This is a complement, not an allowlist against `open`/
+  `active` — so a status this vocabulary cannot classify (a legacy row, or one set by hand
+  in `psql`) is offered too, deliberately, so a human notices and corrects it. `waiting`
+  items are skipped here but still counted, via a separate, positive match against the
+  waiting class only — an unclassified status is never counted as waiting, or it would be
+  permanently unofferable.
+- **Inventory** (`list_items`, `get_history` — "what is on the list"): show anything that is
+  NOT `closed`. An unrecognised status shows here too, for the same reason.
+
+Each is a one-line change, but it is an edit to working code rather than an addition, and it
+is where a regression would actually hurt. It gets a dedicated regression test
+(`test_open_semantics.py`). `import_items`'s todo/done coercion and the two `tracker_md.py`
+sites (the parser's todo/done inference, the renderer's closed-set check) carry status
+semantics too, though neither hard-codes `!= "done"`, so they sit outside this one
+non-additive change.
 
 The change also fixes the bug at its root rather than its end: today a stuck item would sit
-in `doing` for ever and keep blocking the queue. `whats_next` now returns the first `open`
-item, skips `waiting`, and reports the waiting count — so a parked item stays visible without
-clogging the queue.
+in `doing` for ever and keep blocking the queue. `whats_next` now returns the first item that
+is not `waiting`, skips `waiting`, and reports the waiting count — so a parked item stays
+visible without clogging the queue, and an unclassified item stays visible too, as NEXT.
 
 ## Error handling
 

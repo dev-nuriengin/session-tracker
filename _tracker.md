@@ -51,10 +51,12 @@ CLI can put new work into the tracker. And there is no shipped **playbook** yet 
 arriving agent has tool descriptions and nothing else, no rule for when to save or how to
 pick a status. Both are Stage B; see "▸ NEXT" below.
 
-**Open (awaiting a decision):** an item whose stored status is in no vocabulary (a legacy
-row, or one set by hand in `psql`) shows up in `list_items` but is counted nowhere else —
-not as NEXT, not in `open_items`, not in `waiting_items`, not in `get_history`. Whether it
-should count as waiting, count as actionable, or stay as-is is not yet settled.
+**Settled:** an item whose stored status is in no vocabulary (a legacy row, or one set by
+hand in `psql`) is offered as NEXT. A queue query offers anything that is not `waiting`
+and not `closed` — a complement, not an allowlist — so an unclassified status is offered
+on purpose rather than hidden, and a human notices it and fixes it. It also shows up in
+`list_items` and `get_history` (inventory: everything not closed), and is never counted
+in `waiting_items` (that stays a positive match on the waiting class only).
 
 **What still needs a human:** editing `_way-of-work.md` / `_arch.md` (no `update_guidance`
 tool yet — agents can read them, not write them) · removing a project (no `trackden delete`)
@@ -159,9 +161,9 @@ as "finished".
 - Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
   · Phase 11 agent-driven onboard as an MCP tool · Phase 12 `update_guidance` · Phase 12
   guidance indexed in `search` · Phase 12 cwd→project resolution.
-- Open, undecided (not a refinement, not a blocker): an item whose status is in no
-  vocabulary is counted in only one of four queries — see "Open (awaiting a decision)"
-  in "▸ Start here" above.
+- Settled (no longer open): an unrecognised status is now offered by both queue queries
+  (`get_status`, `overview`) as well as showing in both inventory queries (`list_items`,
+  `get_history`) — see "Settled" in "▸ Start here" above.
 
 **Build complete.** The whole product exists: local Postgres core → three doors (MCP · CLI
 · web), summary-first, private, provider-swappable, with RAG + eval + opt-in observability,

@@ -145,3 +145,28 @@ def test_an_unrecognised_stored_status_stays_visible(temp_slug):
         item.status = "whatever-this-is"
         db.commit()
     assert "legacy-item" in {i["title"] for i in repository.list_items(temp_slug)}
+
+
+def test_an_unrecognised_status_is_offered_as_the_next_step(temp_slug):
+    """The owner's ruling: a status we cannot classify surfaces instead of hiding.
+
+    Being handed it as NEXT is how a human discovers a legacy or hand-edited value
+    and corrects it. Counting it as waiting would leave it permanently unofferable.
+    """
+    from sqlalchemy import select
+
+    from app import models
+    from app.db import SessionLocal
+
+    repository.create_project(temp_slug, name="Ruling")
+    item_id = repository.add_item(temp_slug, "legacy-item")
+    with SessionLocal() as db:
+        item = db.scalar(select(models.Item).where(models.Item.id == item_id))
+        item.status = "whatever-this-is"
+        db.commit()
+
+    assert "legacy-item" in repository.get_status(temp_slug)
+    ov = repository.overview(temp_slug)
+    assert ov["next"] == "legacy-item"
+    assert ov["open_items"] == 1
+    assert ov["waiting_items"] == 0   # offered, NOT filed as stalled

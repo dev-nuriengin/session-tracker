@@ -24,9 +24,11 @@ CLOSED = "closed"      # finished or abandoned — hidden by default
 
 CLASSES = frozenset({OPEN, ACTIVE, WAITING, CLOSED})
 
-# What may be offered as "the next step". `active` is included deliberately: an item
-# already being worked on IS the next step, not something to skip past.
-ACTIONABLE = frozenset({OPEN, ACTIVE})
+# A queue offers anything that is NOT `waiting` and NOT `closed` — a complement,
+# not an allowlist. The deliberate consequence: a status this vocabulary cannot
+# classify (a legacy row, or one set by hand in `psql`) is offered too, because it
+# is neither waiting nor closed. That is on purpose — it surfaces the item instead
+# of hiding it, so a human notices and corrects it.
 
 # ---- the shipped default names (data owns the rest) ----
 
