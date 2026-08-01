@@ -62,8 +62,13 @@ ends green and is independently useful; neither leaves the tracker in a worse st
 
 | Stage | Contents | Why it stands alone |
 |---|---|---|
-| **A — unblock the loop** | `statuses.py` · `item_statuses` table · `set_status` on all three doors · the open-semantics change · the `_tracker.md` render rule | Fixes the blocker by itself. After Stage A the core loop works: items move, `whats_next` advances, the mirror tracks. Nothing here depends on the playbook. |
-| **B — teach the agent** | `playbook.py` · `get_playbook` + the digest in `overview` · `add_item` · `add_folder` · `add_status` · the `file` kind · item scoping · `get_history(item_id=…)` · CLI flags · the onboard print | Needs Stage A's vocabulary to reference in rules 4–6, so it comes second. Turns a working store into one an arriving agent can use unprompted. |
+| **A — unblock the loop** | `statuses.py` · `item_statuses` table · `set_status` on all three doors · `add_status` (repository + CLI) · the open-semantics change · the `_tracker.md` render rule | Fixes the blocker by itself. After Stage A the core loop works: items move, `whats_next` advances, the mirror tracks. Nothing here depends on the playbook. |
+| **B — teach the agent** | `playbook.py` · `get_playbook` + the digest in `overview` · `add_item` · `add_folder` · the MCP `add_status` tool · the `file` kind · item scoping · `get_history(item_id=…)` · CLI flags · the onboard print | Needs Stage A's vocabulary to reference in rules 4–6, so it comes second. Turns a working store into one an arriving agent can use unprompted. |
+
+`add_status` (repository + CLI) moved from Stage B to Stage A on review: `item_statuses` is a
+table nothing could write to until it shipped, and an untestable table is dead weight. The
+*MCP* `add_status` tool stays in Stage B — it still leans on the playbook's rule 6 (how a new
+name gets offered) to make sense to an agent without a human prompting it.
 
 Recommended as one spec and two implementation plans, so the blocker can ship without waiting
 on the playbook's text.
@@ -101,7 +106,7 @@ silently invalidating every existing item. Adding a name that is already a defau
 |---|---|---|
 | `statuses.py` **(new)** | Owns the four classes and the shipped default names. Pure — no DB, no filesystem. | New module, ~60 lines. |
 | `playbook.py` **(new)** | Owns Trackden's own rules: the full text, the digest, the version. Pure. | New module. |
-| `repository.py` | DB state. | Adds `set_status`, `list_statuses`, `add_status`. Extends `add_memory` and `add_session_log` with optional item scoping. Five existing queries change their definition of "open". |
+| `repository.py` | DB state. | Adds `set_status`, `list_statuses`, `add_status`. Extends `add_memory` and `add_session_log` with optional item scoping. Four existing queries change their definition of "open". |
 | `mcp_server.py` | Agent-facing door. Thin wrappers, no logic. | Five new tools. `overview` gains two response fields. `get_history` gains one optional parameter. |
 | `cli.py` | Human-facing door. Thin Typer commands. | Three new commands, two new flags (`--item`, `--path`), three exit-code fixes. |
 | `models.py` | Schema. | One new table, two new nullable columns. |
@@ -372,11 +377,14 @@ hand-edited.
 
 ## The one non-additive change
 
-Five existing queries define "open" as `status != "done"` — `repository.py:71`, `:88`,
-`:119`, `:328`, and `overview`. With classes, "open" must become *"the item's status is not in
-the closed class"*. Each is a one-line change, but it is an edit to working code rather than
-an addition, and it is where a regression would actually hurt. It gets a dedicated regression
-test (`test_open_semantics.py`).
+Four existing queries define "open" as `status != "done"` — `repository.py:71`, `:88`,
+`:119`, and `:328` (`get_status`, `overview`, `list_items`, `get_history`). With classes,
+"open" must become *"the item's status is not in the closed class"*. Each is a one-line
+change, but it is an edit to working code rather than an addition, and it is where a
+regression would actually hurt. It gets a dedicated regression test (`test_open_semantics.py`).
+`import_items`'s todo/done coercion and the two `tracker_md.py` sites (the parser's todo/done
+inference, the renderer's closed-set check) carry status semantics too, though neither
+hard-codes `!= "done"`, so they sit outside this one non-additive change.
 
 The change also fixes the bug at its root rather than its end: today a stuck item would sit
 in `doing` for ever and keep blocking the queue. `whats_next` now returns the first `open`

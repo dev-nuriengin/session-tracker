@@ -92,7 +92,9 @@ class Item(Base):
         ForeignKey("folders.id"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), default="todo")  # todo | doing | done
+    status: Mapped[str] = mapped_column(String(20), default="todo")
+    # a name from the project's vocabulary — see statuses.py (the four fixed classes and
+    # the shipped defaults) + item_statuses (a project's extra names on top of them)
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

@@ -21,13 +21,14 @@ plug into it over MCP so they know where everything stands without you re-explai
 | `trackden onboard` | Bring a project in. Reads a repo, offers to import its checklist behind a y/n/edit gate, scaffolds guidance in `~/.trackden`. Never writes to your repo. |
 | `trackden list` · `show <p>` · `status <p>` | See what you have and what's next. |
 | `trackden add-item <p> "…"` · `log` · `remember` | Add work, save progress, store a link or note. |
+| `trackden set-status <p> <item> <status>` · `add-status` · `statuses` | Move an item to a new status; add a project-specific status name; list what's valid. |
 | `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
 | `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
 | `trackden ask "…"` | Semantic search across every project's session logs. |
 
 **What agents get over MCP:** `overview` (call first — cheap), `get_history`, `list_items`,
-`list_memory`, `get_guidance`, `whats_next`, `search`, `save_progress`, `add_memory`,
-`add_decision`, `list_projects`.
+`set_status`, `list_statuses`, `list_memory`, `get_guidance`, `whats_next`, `search`,
+`save_progress`, `add_memory`, `add_decision`, `list_projects`.
 
 **Where things live — one home per fact.** DB owns *state* (projects, items, statuses,
 session logs). Files under `~/.trackden/projects/<slug>/` own *guidance* (way-of-work,
@@ -44,11 +45,16 @@ never hand-edit it. pgvector is a derived index, never a source.
 3. **Decisions go to a file, not the DB.** `add_memory` accepts `link | note | transcript`
    and *rejects* `decision`, pointing you at `add_decision` / `trackden decide`.
 
-**What does NOT work yet — know this before you rely on it:** you **cannot mark an item
-done**. No door can change an item's status (no `set_status` anywhere), so `whats_next` and
-`trackden status` will keep returning the same item for ever. Use it to *hold* work and
-serve it to agents; do not expect it to track progress until `set_status` lands. See
-"▸ NEXT" below.
+**What Stage A still leaves open — know this before you rely on it:** an agent cannot yet
+**create** work — there is no `add_item` / `add_folder` over MCP, so only a human at the
+CLI can put new work into the tracker. And there is no shipped **playbook** yet — an
+arriving agent has tool descriptions and nothing else, no rule for when to save or how to
+pick a status. Both are Stage B; see "▸ NEXT" below.
+
+**Open (awaiting a decision):** an item whose stored status is in no vocabulary (a legacy
+row, or one set by hand in `psql`) shows up in `list_items` but is counted nowhere else —
+not as NEXT, not in `open_items`, not in `waiting_items`, not in `get_history`. Whether it
+should count as waiting, count as actionable, or stay as-is is not yet settled.
 
 **What still needs a human:** editing `_way-of-work.md` / `_arch.md` (no `update_guidance`
 tool yet — agents can read them, not write them) · removing a project (no `trackden delete`)
@@ -79,6 +85,25 @@ It *remembers* work.
 
 ## ▸ Resume here (next session)
 
+### ✅ DONE — Stage A: the loop unblocks (shipped 2026-08-01)
+
+An item can finally move. `statuses.py` fixes four behaviour **classes** in code (`open` ·
+`active` · `waiting` · `closed`) with a growable set of **names** in the DB
+(`item_statuses` — a project's rows ADD to the shipped defaults `todo`/`doing`/`blocked`/
+`done`, never replace them, so `todo`/`done` can never be invalidated). `set_status` reaches
+every door — `repository.set_status` (returns `set`/`unchanged`/`unknown_status` (with the
+valid list)/`unknown_item`/`unknown_project`, always reports `from`/`to`, deliberately not a
+state machine), MCP `set_status` + `list_statuses`, CLI `set-status` + `add-status` +
+`statuses`. "Open" no longer means `status != "done"`: four queries (`get_status`,
+`overview`, `list_items`, `get_history`) now ask "is this in the closed class?", so
+`whats_next` returns the first actionable item, skips `waiting`, and counts it —
+`overview`/`trackden show` both report the waiting count. The `_tracker.md` mirror renders
+a closed name as `[x]` and appends a non-default open status name. Also fixed: `add-folder`,
+`add-item` and `log` printed a failure and still exited `0`; they now exit non-zero, like
+`remember` already did. Spec:
+`docs/superpowers/specs/2026-08-01-trackden-behaviour-layer-design.md`. See Phase 13 below
+for exactly what shipped and what Stage B still owes.
+
 ### ✅ DONE — the guidance path (shipped 2026-07-30)
 
 Guidance (way-of-work / architecture / decisions) is now readable and appendable over
@@ -99,40 +124,44 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT — `set_status`. This one is a blocker, not a refinement.**
+**▸ NEXT — Stage B: teach the agent.**
 
-Nothing anywhere can change an item's status. There is no `set_status`, `mark_done` or
-equivalent in `repository.py`, the CLI or the MCP server — verified 2026-07-31 by grep. An
-item is created `todo` and stays `todo` for ever. Consequences: `whats_next` returns the
-same item indefinitely, `trackden status` shows the same NEXT for ever, and the generated
-`_tracker.md` mirror never moves. You can record *that you worked* (`log` / `save_progress`)
-but never that something is **finished**.
-
-So Trackden can hold work and serve it to agents, but cannot track progress through it —
-the core loop. It sat on the deferred list looking like a nice-to-have; it is the one gap
-that stops daily use. Small to build: one repository function, one MCP tool, one CLI
-command. `models.py` already names the five statuses; only `todo` and `done` are ever
-written, and `done` only by an import.
+Stage A unblocked the loop; Stage B teaches an arriving agent to use it without being told.
+Two things are missing: a shipped **playbook** (`playbook.py` + `get_playbook()`, with a
+digest riding inside every `overview` response so an agent gets the rules without a second
+call) and the **write-side MCP tools** (`add_item`, `add_folder`, `add_status`) so an agent —
+not just a human at the CLI — can put work into the tracker. Also in scope: the `file`
+memory kind, item-scoped memory/logs, and `get_history(item_id=…)`. See Phase 13 below and
+the "Stage B — teach the agent" row of the design spec.
 
 **Then, in order:** launcher/alias so agents call MCP *first* without being told (Phase 11)
 — today continuity depends on you remembering to say "check Trackden" · `trackden delete`
 (no way to remove a project; three findings in the last two branches were made worse by its
-absence) · then dogfooding becomes real: onboard this repo into itself, tick items through
-the tool instead of by hand, retire this file.
+absence — and worth knowing before building it: `Project`'s `cascade="all, delete-orphan"`
+is ORM-level only, there's no DB-level `ON DELETE CASCADE`, so a raw `DELETE FROM projects`
+fails on foreign keys; a delete command must go through the ORM session, not raw SQL) · then
+dogfooding becomes real: onboard this repo into itself, tick items through the tool instead
+of by hand, retire this file.
 
 ---
 
-**Status:** 39 / 47 — all phases 0–12 have shipped their core. **But "phases done" ≠ "usable
-day to day":** of the 8 open items, **one is a blocker** and the rest are genuine
-refinements. Do not read this line as "finished".
+**Status:** 48 / 63 — all phases 0–13 have shipped their Stage A core. **But "phases done" ≠
+"usable day to day":** of the 15 open items, **none are life-support blockers any more** —
+the one gap that used to stop daily use (`set_status`) shipped in Stage A. Stage B (Phase 13)
+is what turns a working store into one an agent can use unprompted. Do not read this line
+as "finished".
 
-- 🔴 **Phase 12 `set_status` — BLOCKER.** No door can change an item's status; see
-  "▸ NEXT" above. Without it the tracker cannot track progress.
+- 🟡 **Phase 13 Stage B — teach the agent.** No playbook ships yet, and an agent still
+  cannot create work over MCP (`add_item` / `add_folder` / the MCP `add_status` tool don't
+  exist; only the CLI and repository can). See "▸ NEXT" above.
 - 🟡 **Phase 11 launcher/alias** — not a blocker, but it is what makes continuity automatic
   instead of dependent on you remembering to mention Trackden.
 - Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
   · Phase 11 agent-driven onboard as an MCP tool · Phase 12 `update_guidance` · Phase 12
   guidance indexed in `search` · Phase 12 cwd→project resolution.
+- Open, undecided (not a refinement, not a blocker): an item whose status is in no
+  vocabulary is counted in only one of four queries — see "Open (awaiting a decision)"
+  in "▸ Start here" above.
 
 **Build complete.** The whole product exists: local Postgres core → three doors (MCP · CLI
 · web), summary-first, private, provider-swappable, with RAG + eval + opt-in observability,
@@ -148,10 +177,9 @@ boundary; `redact()` is best-effort defense-in-depth.
 UI · optional cloud store + hosted UI (opt-in) · launcher/alias so agents "call MCP first"
 without touching repos · agent-driven onboard exposed as an MCP tool · remove the
 superseded `cli/` skeleton · start dogfooding (retire `_tracker.md` into the product itself,
-onboarding onto itself) · `trackden add-folder`, `add-item`, and `log` still echo a failure
-message and exit 0 on an unknown project — `remember` was fixed to exit non-zero on failure
-in this branch, those three were deliberately left for a follow-up so a script can actually
-detect that nothing was saved.
+onboarding onto itself). (`add-folder`, `add-item`, and `log` used to echo a failure message
+and still exit 0 — fixed in Stage A, see Phase 13; all four write commands now exit non-zero
+on failure.)
 
 **Ship (Phase 10) in place:** `backend/Dockerfile` (uv) + `docker compose up --build`
 (db healthcheck → backend, `ANTHROPIC_API_KEY` from `.env`) + `.dockerignore` + README run
@@ -234,7 +262,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `onboard.py` — read-only repo scan, in priority order: `_tracker.md` · `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `**/_tracker.md` · `CLAUDE.md` · `AGENTS.md` (the last two seed `_way-of-work.md`, never treated as sources of truth)
 - [x] `run_onboard` orchestrator: identify → scan+gate → DB project → scaffold → summary; the review gate (y/n/edit, blank = import) only ever runs while a project is itemless, so re-onboarding can't duplicate items
 - [x] `trackden onboard` CLI: interactive wizard + flags (`--name --kind --client --repo --no-import --yes/-y`)
-- [x] pytest enters the repo for the first time (81 tests); DB-marked tests auto-skip when Postgres is unreachable
+- [x] pytest enters the repo for the first time (81 tests then; 240 now, after the guidance and Stage A branches added more); DB-marked tests auto-skip when Postgres is unreachable
 - [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
 - [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)
 
@@ -246,6 +274,32 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `repository.MEMORY_KINDS` narrows the `memory` table to `link | note | transcript`; `add_memory` raises `ValueError` outside it — `remember` (CLI) and `add_memory` (MCP) both catch it and exit/return non-success rather than crash
 - [x] One real end-to-end test (`@pytest.mark.db`, `test_guidance.py`) against the actual repository and workspace, no fakes — closes the gap the onboarding branch's migration bug exposed
 - [ ] Deferred: `update_guidance` (editing rules/architecture from an agent) — still a human action on the file
-- [ ] 🔴 **BLOCKER — `set_status`, on every door.** Not "an agent flipping a status": *nothing* can change one. No `set_status`/`mark_done` in `repository.py`, `cli.py` or `mcp_server.py` (verified by grep 2026-07-31). Items are born `todo` and stay `todo`; `done` only ever arrives via an import. `models.py` documents five statuses, code writes two. This is the core loop — build it before anything else here.
+- [x] **`set_status`, on every door — SHIPPED (Stage A, 2026-08-01, see Phase 13).** An item can move: `repository.set_status` (any valid name to any other, no state machine, always reports `from`/`to`), MCP `set_status`, CLI `set-status`. Status is now a fixed behaviour **class** (`open` · `active` · `waiting` · `closed`) in `statuses.py` with a growable set of **names** in the `item_statuses` table.
 - [ ] Deferred: `search` does not index guidance files yet — semantic search still covers session logs only
 - [ ] Deferred: cwd→project resolution — every door still takes an explicit project/slug
+
+## Phase 13 — Behaviour layer: Stage A unblocks the loop, Stage B teaches the agent
+
+Spec: `docs/superpowers/specs/2026-08-01-trackden-behaviour-layer-design.md` (approved
+2026-08-01). Split into two shippable stages on purpose — Stage A fixes the blocker by
+itself; Stage B needs Stage A's vocabulary to reference, so it comes second.
+
+### Stage A — unblock the loop ✅ (shipped 2026-08-01)
+- [x] `statuses.py` — four fixed behaviour classes in code (`open` · `active` · `waiting` · `closed`); four shipped default names as data (`todo`→open, `doing`→active, `blocked`→waiting, `done`→closed)
+- [x] `item_statuses` table + `repository.list_statuses` / `add_status` / `closed_names` — a project ADDS names on top of the shipped defaults, never replaces them; moved here from Stage B in the spec correction (a table nothing can write to is untestable dead weight); new table, so `create_all` covers it, no migration line needed
+- [x] `repository.set_status` on all three doors (repository · MCP · CLI) — deliberately not a state machine, any valid name may follow any other (reopening included); always reports `from`/`to`; outcomes `set` · `unchanged` · `unknown_status` (with the valid list) · `unknown_item` · `unknown_project`
+- [x] The open-semantics change — four queries (`get_status`, `overview`, `list_items`, `get_history`) now ask "is this item's status in the closed class?" instead of `!= "done"`; `whats_next` returns the first actionable (open|active) item, skips `waiting`, and counts it
+- [x] `overview` gains `waiting_items` and `statuses`; every pre-existing key kept its name; `trackden show` now prints the waiting count too
+- [x] `_tracker.md` mirror — a closed name renders `[x]`; a non-default open status appends its name (`· parked`); parser untouched
+- [x] MCP tools `set_status`, `list_statuses` (tool count 11 → 13); CLI commands `set-status`, `add-status`, `statuses` (command count 13 → 16)
+- [x] Fixed the exit-0 bug: `add-folder`, `add-item` and `log` now exit non-zero on failure, matching `remember`
+
+### Stage B — teach the agent (open)
+- [ ] `playbook.py` — Trackden's own shipped, read-only rules: full text, a digest, a version — served by `get_playbook()`
+- [ ] The digest riding inside every `overview` response, so the rules land in context without a second call
+- [ ] Write-side MCP tools: `add_item`, `add_folder`, the MCP `add_status` tool (repository + CLI `add_status` already shipped in Stage A)
+- [ ] The `file` memory kind (`memory.path`) — point at a local artifact (recording, `findings.md`, an HTML output) without Trackden touching the disk
+- [ ] Item-scoped memory and logs (`memory.item_id` wired through, `session_logs.item_id`) — a finding attaches to the item it belongs to
+- [ ] `get_history(item_id=…)` — the read side for item-scoped work
+- [ ] CLI flags `--item` (`remember`, `log`), `--path` (`remember`); `trackden playbook`
+- [ ] `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md` (never written — the repo stays untouched)

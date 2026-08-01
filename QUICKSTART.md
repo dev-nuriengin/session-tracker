@@ -98,6 +98,8 @@ restart so it loads). Your agent now has these tools:
 | `overview` | call this FIRST for a project — compact summary, not a full dump |
 | `get_history` | pull a project's history **first when resuming** — never start blind |
 | `list_items` | drill-down: a project's items (open only unless asked for done too) |
+| `set_status` | move an item to a new status — `doing`, `waiting`, `done`, or a project's own |
+| `list_statuses` | the status names this project accepts, each with the class it behaves as |
 | `list_memory` | drill-down: a project's durable memory (links, notes, transcripts) |
 | `get_guidance` | read the project's rules / architecture / decisions — one doc per call |
 | `whats_next` | suggested next steps |
