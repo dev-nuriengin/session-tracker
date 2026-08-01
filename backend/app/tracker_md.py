@@ -11,8 +11,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal, TypedDict
 
-TODO = "todo"
-DONE = "done"
+# Re-exported from `statuses`, which owns the vocabulary. Kept as names here because
+# the parser only ever infers these two, and `repository` imports them from this
+# module today. No cycle: `statuses` imports nothing from the app.
+from .statuses import DONE, TODO  # noqa: F401 — re-exported for existing callers
 
 _HEADING = re.compile(r"^\s{0,3}#{2,3}\s+(.*?)\s*$")
 _CHECKBOX = re.compile(r"^\s*[-*]\s*\[([ xX])\]\s+(.*?)\s*$")
@@ -109,17 +111,30 @@ def is_generated(text: str) -> bool:
     return _GENERATED_BANNER in text
 
 
-def render_tracker_md(project_name: str, items: list[TrackerItem]) -> str:
+def render_tracker_md(
+    project_name: str,
+    items: list[TrackerItem],
+    closed: frozenset[str] | set[str] | None = None,
+) -> str:
     """Render the DB's items as the generated `_tracker.md` mirror.
 
     Derived output, never a source of truth — the banner says so to whoever opens it.
     Items are grouped under their folder name; unfiled items go under `UNFILED`.
+
+    Markdown only expresses done and not-done, so: anything in `closed` renders
+    `[x]`, everything else `[ ]`, and a non-default open status has its name
+    appended so `parked` is visible at a glance. `closed=None` means just `done`,
+    which keeps every caller that predates the status vocabulary behaving the same.
+
+    Stays pure: the caller resolves the project's closed names and passes them in.
     """
+    closed_names = frozenset(closed) if closed is not None else frozenset({DONE})
+
     groups: dict[str, list[dict]] = {}
     for item in items:
         groups.setdefault(item.get("folder") or UNFILED, []).append(item)
 
-    done = sum(1 for item in items if item.get("status") == DONE)
+    done = sum(1 for item in items if item.get("status") in closed_names)
     lines = [
         f"# {project_name} — tracker (GENERATED)",
         "",
@@ -131,7 +146,13 @@ def render_tracker_md(project_name: str, items: list[TrackerItem]) -> str:
     for folder, group in groups.items():
         lines.append(f"## {folder}")
         for item in group:
-            box = "x" if item.get("status") == DONE else " "
-            lines.append(f"- [{box}] {item['title']}")
+            status = item.get("status")
+            is_closed = status in closed_names
+            box = "x" if is_closed else " "
+            # A closed box already says "finished"; naming it too would be noise.
+            # An open item that is not plain `todo` gets its name, so a parked or
+            # blocked item is readable without opening the CLI.
+            suffix = "" if is_closed or status == TODO else f"  · {status}"
+            lines.append(f"- [{box}] {item['title']}{suffix}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

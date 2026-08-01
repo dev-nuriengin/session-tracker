@@ -249,7 +249,11 @@ def run_onboard(
             for item in chosen
         ])
 
-    mirror = render_tracker_md(display, repository.items_with_folders(slug))
+    mirror = render_tracker_md(
+        display,
+        repository.items_with_folders(slug),
+        closed=repository.closed_names(slug),
+    )
     files = workspace.scaffold_project(
         slug, name=display, way_of_work=way_of_work, tracker_md=mirror, home=home
     )

@@ -88,3 +88,67 @@ def test_is_generated_false_for_hand_written_text():
 
 def test_is_generated_false_for_empty_text():
     assert is_generated("") is False
+
+
+def test_render_marks_any_closed_name_as_ticked():
+    out = render_tracker_md(
+        "P",
+        [{"title": "abandoned", "status": "dropped", "folder": None}],
+        closed={"done", "dropped"},
+    )
+    assert "- [x] abandoned" in out
+
+
+def test_render_appends_a_non_default_status_name():
+    out = render_tracker_md(
+        "P",
+        [{"title": "waiting on vendor", "status": "parked", "folder": None}],
+    )
+    assert "- [ ] waiting on vendor  · parked" in out
+
+
+def test_render_does_not_annotate_a_plain_todo():
+    out = render_tracker_md("P", [{"title": "plain", "status": "todo", "folder": None}])
+    assert "- [ ] plain" in out
+    assert "· todo" not in out
+
+
+def test_render_does_not_annotate_a_closed_item():
+    # the [x] already says it; the name would be noise
+    out = render_tracker_md(
+        "P",
+        [{"title": "shipped", "status": "dropped", "folder": None}],
+        closed={"done", "dropped"},
+    )
+    assert "· dropped" not in out
+
+
+def test_render_counts_every_closed_name_as_progress():
+    out = render_tracker_md(
+        "P",
+        [
+            {"title": "a", "status": "done", "folder": None},
+            {"title": "b", "status": "dropped", "folder": None},
+            {"title": "c", "status": "todo", "folder": None},
+        ],
+        closed={"done", "dropped"},
+    )
+    assert "**Progress:** 2 / 3 done." in out
+
+
+def test_render_without_a_closed_set_still_means_just_done():
+    # every pre-existing caller relies on this default
+    out = render_tracker_md(
+        "P",
+        [{"title": "a", "status": "dropped", "folder": None}],
+    )
+    assert "- [ ] a" in out
+
+
+def test_an_annotated_line_reparses_to_a_todo_item():
+    """The parser must survive the annotation the renderer adds."""
+    rendered = render_tracker_md(
+        "P", [{"title": "waiting on vendor", "status": "parked", "folder": None}]
+    )
+    reparsed = parse_tracker_md(rendered)
+    assert reparsed.items[0].status == "todo"
