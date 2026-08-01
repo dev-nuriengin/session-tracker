@@ -58,36 +58,60 @@ def create_project(slug: str, name: str | None = None, kind: str = "personal",
 
 
 def get_status(slug: str) -> str:
-    """Short status string for a project (built from its first not-done item).
-    Returns '' if the project is unknown."""
+    """Short status string for a project: its next ACTIONABLE item.
+
+    "Actionable" is open-or-active, so an item someone is already on counts as the
+    next step. Waiting items (blocked, parked, …) are skipped but reported — that
+    is what stops a stalled item from blocking the queue for ever.
+    Returns '' if the project is unknown.
+    """
     with SessionLocal() as db:
         project = db.scalar(
             select(models.Project).where(models.Project.slug == slug.strip().lower())
         )
         if project is None:
             return ""
+        vocabulary = _vocabulary(db, project.id)
+        actionable = st.names_in(*st.ACTIONABLE, extra=vocabulary)
+        waiting = st.names_in(st.WAITING, extra=vocabulary)
+
         nxt = db.scalar(
             select(models.Item)
-            .where(models.Item.project_id == project.id, models.Item.status != "done")
-            .order_by(models.Item.position)
+            .where(models.Item.project_id == project.id, models.Item.status.in_(actionable))
+            .order_by(models.Item.position, models.Item.id)
         )
+        waiting_count = db.scalar(
+            select(func.count()).select_from(models.Item)
+            .where(models.Item.project_id == project.id, models.Item.status.in_(waiting))
+        ) or 0
+        tail = f"  ({waiting_count} waiting)" if waiting_count else ""
+
         if nxt is None:
-            return f"{project.name}: all items done."
-        return f"{project.name}: NEXT — {nxt.title}"
+            return f"{project.name}: all items done.{tail}"
+        return f"{project.name}: NEXT — {nxt.title}{tail}"
 
 
 def overview(slug: str) -> dict:
     """The cheap FIRST look — a compact summary, not a full dump. Counts + a few
-    titles + last activity. Drill deeper with list_items / list_memory / get_history."""
+    titles + last activity + the valid status vocabulary. Drill deeper with
+    list_items / list_memory / get_history."""
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
             return {}
+        vocabulary = _vocabulary(db, project.id)
+        actionable = st.names_in(*st.ACTIONABLE, extra=vocabulary)
+        waiting = st.names_in(st.WAITING, extra=vocabulary)
+
         open_titles = db.scalars(
             select(models.Item.title)
-            .where(models.Item.project_id == project.id, models.Item.status != "done")
-            .order_by(models.Item.position)
+            .where(models.Item.project_id == project.id, models.Item.status.in_(actionable))
+            .order_by(models.Item.position, models.Item.id)
         ).all()
+        waiting_count = db.scalar(
+            select(func.count()).select_from(models.Item)
+            .where(models.Item.project_id == project.id, models.Item.status.in_(waiting))
+        )
         mem_count = db.scalar(
             select(func.count()).select_from(models.Memory)
             .where(models.Memory.project_id == project.id)
@@ -103,21 +127,32 @@ def overview(slug: str) -> dict:
             "next": open_titles[0] if open_titles else None,
             "open_items": len(open_titles),
             "open_preview": list(open_titles[:3]),  # a taste, not all of them
+            "waiting_items": waiting_count or 0,
             "memory_entries": mem_count or 0,
             "last_activity": last_log,
+            # the valid vocabulary travels with the summary, so a caller never has
+            # to guess a status name — and never needs a second round trip to check
+            "statuses": [{"name": n, "behaves_as": c} for n, c in vocabulary.items()],
         }
 
 
 def list_items(slug: str, include_done: bool = False) -> list[dict]:
-    """Drill-down: all items for a project (open only unless include_done)."""
+    """Drill-down: all items for a project (open only unless include_done).
+
+    "Open" here means "not in the closed class" — so `waiting` items still show up
+    (you need to see what stalled), and a project's own closed name like `dropped`
+    is hidden just as `done` is. An unrecognised stored status counts as open: an
+    item we cannot classify must stay visible rather than vanish.
+    """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
             return []
         q = select(models.Item).where(models.Item.project_id == project.id)
         if not include_done:
-            q = q.where(models.Item.status != "done")
-        rows = db.scalars(q.order_by(models.Item.position)).all()
+            closed = st.names_in(st.CLOSED, extra=_vocabulary(db, project.id))
+            q = q.where(models.Item.status.notin_(closed))
+        rows = db.scalars(q.order_by(models.Item.position, models.Item.id)).all()
         return [{"id": i.id, "title": i.title, "status": i.status, "folder_id": i.folder_id} for i in rows]
 
 
@@ -433,10 +468,11 @@ def get_history(slug: str, limit: int = 10) -> dict:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
             return {}
+        actionable = st.names_in(*st.ACTIONABLE, extra=_vocabulary(db, project.id))
         open_items = db.scalars(
             select(models.Item)
-            .where(models.Item.project_id == project.id, models.Item.status != "done")
-            .order_by(models.Item.position)
+            .where(models.Item.project_id == project.id, models.Item.status.in_(actionable))
+            .order_by(models.Item.position, models.Item.id)
         ).all()
         recent_logs = db.scalars(
             select(models.SessionLog)
