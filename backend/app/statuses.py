@@ -70,7 +70,7 @@ def names_in(*classes: str, extra: dict[str, str] | None = None) -> frozenset[st
     """Every status name belonging to the given class(es).
 
     This is what the repository's queries are written against — they ask for
-    "the closed names" or "the actionable names", never for a literal `"done"`.
+    "the closed names" or "the waiting names", never for a literal `"done"`.
     """
     unknown = set(classes) - CLASSES
     if unknown:

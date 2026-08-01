@@ -98,7 +98,8 @@ valid list)/`unknown_item`/`unknown_project`, always reports `from`/`to`, delibe
 state machine), MCP `set_status` + `list_statuses`, CLI `set-status` + `add-status` +
 `statuses`. "Open" no longer means `status != "done"`: four queries (`get_status`,
 `overview`, `list_items`, `get_history`) now ask "is this in the closed class?", so
-`whats_next` returns the first actionable item, skips `waiting`, and counts it —
+`whats_next` returns the first item that is neither `waiting` nor `closed` (an
+unrecognised status offered too, on purpose), skips `waiting`, and counts it —
 `overview`/`trackden show` both report the waiting count. The `_tracker.md` mirror renders
 a closed name as `[x]` and appends a non-default open status name. Also fixed: `add-folder`,
 `add-item` and `log` printed a failure and still exited `0`; they now exit non-zero, like
@@ -290,7 +291,7 @@ itself; Stage B needs Stage A's vocabulary to reference, so it comes second.
 - [x] `statuses.py` — four fixed behaviour classes in code (`open` · `active` · `waiting` · `closed`); four shipped default names as data (`todo`→open, `doing`→active, `blocked`→waiting, `done`→closed)
 - [x] `item_statuses` table + `repository.list_statuses` / `add_status` / `closed_names` — a project ADDS names on top of the shipped defaults, never replaces them; moved here from Stage B in the spec correction (a table nothing can write to is untestable dead weight); new table, so `create_all` covers it, no migration line needed
 - [x] `repository.set_status` on all three doors (repository · MCP · CLI) — deliberately not a state machine, any valid name may follow any other (reopening included); always reports `from`/`to`; outcomes `set` · `unchanged` · `unknown_status` (with the valid list) · `unknown_item` · `unknown_project`
-- [x] The open-semantics change — four queries (`get_status`, `overview`, `list_items`, `get_history`) now ask "is this item's status in the closed class?" instead of `!= "done"`; `whats_next` returns the first actionable (open|active) item, skips `waiting`, and counts it
+- [x] The open-semantics change — four queries (`get_status`, `overview`, `list_items`, `get_history`) now ask "is this item's status in the closed class?" instead of `!= "done"`; `whats_next` returns the first item that is neither `waiting` nor `closed` (an unrecognised status offered too, on purpose), skips `waiting`, and counts it
 - [x] `overview` gains `waiting_items` and `statuses`; every pre-existing key kept its name; `trackden show` now prints the waiting count too
 - [x] `_tracker.md` mirror — a closed name renders `[x]`; a non-default open status appends its name (`· parked`); parser untouched
 - [x] MCP tools `set_status`, `list_statuses` (tool count 11 → 13); CLI commands `set-status`, `add-status`, `statuses` (command count 13 → 16)

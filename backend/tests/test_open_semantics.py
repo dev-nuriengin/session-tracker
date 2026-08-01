@@ -48,7 +48,7 @@ def test_list_items_with_include_done_shows_everything(project):
 
 # ---- get_status / the NEXT step ----
 
-def test_next_is_the_first_actionable_item(project):
+def test_next_is_the_first_offerable_item(project):
     slug, _ = project
     assert "item-todo" in repository.get_status(slug)
 
@@ -76,7 +76,7 @@ def test_an_active_item_can_be_the_next_step(project):
     assert "item-doing" in repository.get_status(slug)
 
 
-def test_all_actionable_items_closed_says_so(temp_slug):
+def test_all_offerable_items_closed_says_so(temp_slug):
     repository.create_project(temp_slug, name="Tiny")
     item_id = repository.add_item(temp_slug, "only-item")
     repository.set_status(temp_slug, item_id, "done")
@@ -85,7 +85,7 @@ def test_all_actionable_items_closed_says_so(temp_slug):
 
 # ---- overview ----
 
-def test_overview_counts_actionable_and_waiting_separately(project):
+def test_overview_counts_offerable_and_waiting_separately(project):
     slug, _ = project
     ov = repository.overview(slug)
     assert ov["open_items"] == 2      # todo + doing
