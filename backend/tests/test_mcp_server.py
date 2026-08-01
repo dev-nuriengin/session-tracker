@@ -116,12 +116,15 @@ def test_set_status_passes_an_unknown_status_straight_through(monkeypatch):
 
 
 def test_list_statuses_tool_delegates_to_the_repository(monkeypatch):
-    monkeypatch.setattr(
-        mcp_server.repository,
-        "list_statuses",
-        lambda slug: [{"name": "todo", "behaves_as": "open"}],
-    )
+    seen = {}
+
+    def fake(slug):
+        seen["slug"] = slug
+        return [{"name": "todo", "behaves_as": "open"}]
+
+    monkeypatch.setattr(mcp_server.repository, "list_statuses", fake)
     assert mcp_server.list_statuses("acme") == [{"name": "todo", "behaves_as": "open"}]
+    assert seen == {"slug": "acme"}
 
 
 def test_set_status_docstring_tells_the_agent_to_ask_before_closing():

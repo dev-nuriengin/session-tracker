@@ -60,9 +60,10 @@ def create_project(slug: str, name: str | None = None, kind: str = "personal",
 def get_status(slug: str) -> str:
     """Short status string for a project: its next ACTIONABLE item.
 
-    "Actionable" is open-or-active, so an item someone is already on counts as the
-    next step. Waiting items (blocked, parked, …) are skipped but reported — that
-    is what stops a stalled item from blocking the queue for ever.
+    Queue: actionable only — "what should I do next", not "what exists". So
+    "actionable" is open-or-active, and an item someone is already on counts as
+    the next step. Waiting items (blocked, parked, …) are skipped but reported —
+    that is what stops a stalled item from blocking the queue for ever.
     Returns '' if the project is unknown.
     """
     with SessionLocal() as db:
@@ -94,7 +95,11 @@ def get_status(slug: str) -> str:
 def overview(slug: str) -> dict:
     """The cheap FIRST look — a compact summary, not a full dump. Counts + a few
     titles + last activity + the valid status vocabulary. Drill deeper with
-    list_items / list_memory / get_history."""
+    list_items / list_memory / get_history.
+
+    Queue: actionable only — its `next`/`open_preview` are "what to do next", not
+    an inventory of everything on the list.
+    """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
@@ -139,9 +144,10 @@ def overview(slug: str) -> dict:
 def list_items(slug: str, include_done: bool = False) -> list[dict]:
     """Drill-down: all items for a project (open only unless include_done).
 
-    "Open" here means "not in the closed class" — so `waiting` items still show up
-    (you need to see what stalled), and a project's own closed name like `dropped`
-    is hidden just as `done` is. An unrecognised stored status counts as open: an
+    Inventory: everything not closed, so stalled work stays discoverable. "Open"
+    here means "not in the closed class" — so `waiting` items still show up (you
+    need to see what stalled), and a project's own closed name like `dropped` is
+    hidden just as `done` is. An unrecognised stored status counts as open: an
     item we cannot classify must stay visible rather than vanish.
     """
     with SessionLocal() as db:
@@ -271,6 +277,11 @@ def add_item(slug: str, title: str, folder_id: int | None = None) -> int | None:
 
 # ---- the status vocabulary ----
 
+# Must match models.ItemStatus.name's column width: a name longer than this must
+# be rejected as `invalid_name` here, before it ever reaches Postgres as a DataError.
+MAX_STATUS_NAME = 20
+
+
 def _vocabulary(db, project_id: int) -> dict[str, str]:
     """The resolved status vocabulary for one project: defaults + its extras.
 
@@ -312,9 +323,12 @@ def add_status(slug: str, name: str, behaves_as: str) -> str:
     """Add one extra status name to a project. Returns an outcome, never raises.
 
     Outcomes: added · duplicate_name · unknown_class · invalid_name · unknown_project
+    `invalid_name` covers both a blank name and one longer than the column allows
+    (MAX_STATUS_NAME) — an unvalidated long name would otherwise reach Postgres as
+    a raw DataError instead of a reported outcome.
     """
     name = name.strip().lower()
-    if not name:
+    if not name or len(name) > MAX_STATUS_NAME:
         return "invalid_name"
     if behaves_as not in st.CLASSES:
         return "unknown_class"
@@ -465,15 +479,20 @@ def search_logs(query: str, limit: int = 5) -> list[dict]:
 
 def get_history(slug: str, limit: int = 10) -> dict:
     """Continuity payload for a new session — 'pull the history first'.
-    Returns the project's open items, recent memory, and recent session logs."""
+
+    Inventory: everything not closed, so stalled work stays discoverable — a
+    `waiting` item still appears here even though it would never be offered as
+    NEXT. Returns the project's not-closed items, recent memory, and recent
+    session logs.
+    """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
             return {}
-        actionable = st.names_in(*st.ACTIONABLE, extra=_vocabulary(db, project.id))
+        closed = st.names_in(st.CLOSED, extra=_vocabulary(db, project.id))
         open_items = db.scalars(
             select(models.Item)
-            .where(models.Item.project_id == project.id, models.Item.status.in_(actionable))
+            .where(models.Item.project_id == project.id, models.Item.status.notin_(closed))
             .order_by(models.Item.position, models.Item.id)
         ).all()
         recent_logs = db.scalars(

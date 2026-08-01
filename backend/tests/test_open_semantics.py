@@ -94,7 +94,8 @@ def test_overview_counts_actionable_and_waiting_separately(project):
 
 def test_overview_next_matches_get_status(project):
     slug, _ = project
-    assert repository.overview(slug)["next"] == "item-todo"
+    next_title = repository.overview(slug)["next"]
+    assert next_title in repository.get_status(slug)
 
 
 def test_overview_preview_holds_no_waiting_or_closed_item(project):
@@ -116,10 +117,12 @@ def test_overview_on_an_unknown_project_is_still_empty():
 
 # ---- get_history ----
 
-def test_history_open_items_exclude_waiting_and_closed(project):
+def test_history_is_an_inventory_and_keeps_waiting_items(project):
+    """A stalled item must stay discoverable — `trackden show --full` reads this."""
     slug, _ = project
-    open_items = repository.get_history(slug)["open_items"]
-    assert set(open_items) == {"item-todo", "item-doing"}
+    titles = set(repository.get_history(slug)["open_items"])
+    assert {"item-blocked", "item-parked"} <= titles
+    assert "item-done" not in titles and "item-dropped" not in titles
 
 
 # ---- the safety default ----

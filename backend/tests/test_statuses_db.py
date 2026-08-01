@@ -55,6 +55,15 @@ def test_a_blank_name_is_rejected(project):
     assert repository.add_status(project, "   ", "waiting") == "invalid_name"
 
 
+def test_a_name_longer_than_the_column_is_rejected(project):
+    assert repository.add_status(project, "waiting-on-vendor-legal", "waiting") == "invalid_name"
+
+
+def test_a_name_at_the_length_limit_is_accepted(project):
+    name = "x" * repository.MAX_STATUS_NAME
+    assert repository.add_status(project, name, "waiting") == "added"
+
+
 def test_a_name_is_stored_normalised(project):
     assert repository.add_status(project, "  Parked  ", "waiting") == "added"
     assert "parked" in [r["name"] for r in repository.list_statuses(project)]

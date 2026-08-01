@@ -163,7 +163,7 @@ def add_status(
     messages = {
         "duplicate_name": f"'{name}' is already a status in {project}",
         "unknown_class": f"unknown class '{behaves_as}'. valid: open, active, waiting, closed",
-        "invalid_name": "a status name cannot be blank",
+        "invalid_name": f"a status name cannot be blank or longer than {repository.MAX_STATUS_NAME} characters",
         "unknown_project": f"unknown project '{project}'",
     }
     typer.echo(messages[outcome])

@@ -117,7 +117,9 @@ def search(query: str, limit: int = 5) -> list[dict]:
 
 @mcp.tool()
 def whats_next(project: str) -> str:
-    """The single next step for a project (its first not-done item)."""
+    """The single next step for a project: its first ACTIONABLE item (open or
+    active). Waiting items (blocked, parked, …) are skipped here but still
+    reported as a count — use get_history or list_items to see which ones."""
     return repository.get_status(project)
 
 
