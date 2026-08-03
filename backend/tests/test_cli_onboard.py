@@ -191,6 +191,31 @@ def test_onboard_empty_slug_exits_cleanly_without_a_traceback(home, fake_db):
     assert fake_db["projects"] == set()
 
 
+def _snapshot(root):
+    """Every file under `root`, by relative path and content — recursive.
+
+    `iterdir()` would only see the top level, so a write into a pre-existing
+    nested directory would go unnoticed. This is the promise onboarding rests on,
+    so the check has to reach the whole tree.
+    """
+    return {
+        str(p.relative_to(root)): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
+
+
+def _dirs(root):
+    """Every directory under `root`, by relative path.
+
+    `_snapshot` above is directory-safe (`is_file()` skips them), which also means
+    it wouldn't by itself flag a newly *created* subdirectory that stayed empty.
+    Tracking directories separately makes that case an explicit assertion rather
+    than an incidental side effect of `read_bytes()` raising on a directory.
+    """
+    return {str(p.relative_to(root)) for p in root.rglob("*") if p.is_dir()}
+
+
 def test_onboard_prints_a_paste_ready_snippet_without_writing_to_the_repo(
     home, fake_db, tmp_path
 ):
@@ -199,12 +224,16 @@ def test_onboard_prints_a_paste_ready_snippet_without_writing_to_the_repo(
     This is the promise `workspace.py`'s header makes ("the user's repos stay
     untouched"); onboarding is where that promise is easiest to break by accident,
     so it gets a direct test: snapshot the scanned repo's contents before and after,
-    and assert nothing moved.
+    and assert nothing moved. The fixture repo has a nested subdirectory (`src/`)
+    so the recursive snapshot is actually exercised, not just available.
     """
     repo = tmp_path / "some-repo"
     repo.mkdir()
     (repo / "README.md").write_text("hello\n", encoding="utf-8")
-    before = {p.name: p.read_bytes() for p in repo.iterdir()}
+    (repo / "src").mkdir()
+    (repo / "src" / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    before_files = _snapshot(repo)
+    before_dirs = _dirs(repo)
 
     result = runner.invoke(
         app,
@@ -224,5 +253,5 @@ def test_onboard_prints_a_paste_ready_snippet_without_writing_to_the_repo(
     assert "overview" in result.output
     assert "snippet-demo" in result.output
 
-    after = {p.name: p.read_bytes() for p in repo.iterdir()}
-    assert after == before, "onboard must not write to the scanned repo"
+    assert _snapshot(repo) == before_files, "onboard must not write to the scanned repo"
+    assert _dirs(repo) == before_dirs, "onboard must not create directories in the scanned repo"
