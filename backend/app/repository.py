@@ -260,12 +260,23 @@ def items_with_folders(slug: str) -> list[TrackerItem]:
 def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
     """Create a folder in a project. Returns an outcome, never raises.
 
-    Outcomes: added (with `folder_id`) · unknown_parent · unknown_project
+    Outcomes: added (with `folder_id`) · invalid_name · unknown_parent · unknown_project
+
+    `invalid_name` covers both a blank name and one longer than the column allows
+    (MAX_FOLDER_NAME) — an unvalidated long name would otherwise reach Postgres as a
+    raw DataError instead of a reported outcome. Checked FIRST, before opening a
+    session, same as `add_status` validates cheaply before touching the database.
 
     `parent_id` is validated against THIS project. The ForeignKey alone only proves
     the row exists, not that it belongs here, so without this check a caller could
     nest a folder inside another project's tree — silently, with no error to reveal it.
+
+    The new folder is appended after every existing folder in the project (by
+    `position`), never inserted at the front — see `add_item` for why that matters.
     """
+    name = name.strip()
+    if not name or len(name) > MAX_FOLDER_NAME:
+        return {"status": "invalid_name"}
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
@@ -279,7 +290,11 @@ def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
             )
             if parent is None:
                 return {"status": "unknown_parent"}
-        folder = models.Folder(project_id=project.id, name=name, parent_id=parent_id)
+        max_position = db.scalar(
+            select(func.max(models.Folder.position)).where(models.Folder.project_id == project.id)
+        )
+        position = 0 if max_position is None else max_position + 1
+        folder = models.Folder(project_id=project.id, name=name, parent_id=parent_id, position=position)
         db.add(folder)
         db.commit()
         return {"status": "added", "folder_id": folder.id}
@@ -323,8 +338,17 @@ def add_item(slug: str, title: str, folder_id: int | None = None,
             if name not in vocabulary:
                 return {"status": "unknown_status", "valid": list(vocabulary)}
 
+        # Append, never prepend: `import_items` assigns 0..n and queues order by
+        # (position, id), so a new item at position 0 would jump ahead of work the
+        # user already sequenced. One past the current max keeps it last; an empty
+        # project (no rows yet) yields position 0.
+        max_position = db.scalar(
+            select(func.max(models.Item.position)).where(models.Item.project_id == project.id)
+        )
+        position = 0 if max_position is None else max_position + 1
+
         item = models.Item(
-            project_id=project.id, folder_id=folder_id, title=title, status=name
+            project_id=project.id, folder_id=folder_id, title=title, status=name, position=position
         )
         db.add(item)
         db.commit()
@@ -336,6 +360,11 @@ def add_item(slug: str, title: str, folder_id: int | None = None,
 # Must match models.ItemStatus.name's column width: a name longer than this must
 # be rejected as `invalid_name` here, before it ever reaches Postgres as a DataError.
 MAX_STATUS_NAME = 20
+
+# Must match models.Folder.name's column width (models.py): a name longer than
+# this must be rejected as `invalid_name` here, before it ever reaches Postgres
+# as a DataError — same defect class as MAX_STATUS_NAME above, same fix.
+MAX_FOLDER_NAME = 200
 
 
 def _vocabulary(db, project_id: int) -> dict[str, str]:
@@ -392,7 +421,7 @@ def add_status(slug: str, name: str, behaves_as: str) -> dict:
     if not name or len(name) > MAX_STATUS_NAME:
         return {"status": "invalid_name"}
     if behaves_as not in st.CLASSES:
-        return {"status": "unknown_class", "valid": sorted(st.CLASSES)}
+        return {"status": "unknown_class", "valid": list(st.CLASS_ORDER)}
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:

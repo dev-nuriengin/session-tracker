@@ -91,7 +91,7 @@ def add_folder(project: str, name: str, parent_id: int | None = None) -> dict:
     structure — the shape of their work is theirs, not yours to impose.
 
     `parent_id` nests this folder inside another folder of the SAME project.
-    Outcome: added (with `folder_id`) · unknown_parent · unknown_project."""
+    Outcome: added (with `folder_id`) · invalid_name · unknown_parent · unknown_project."""
     return repository.create_folder(project, name, parent_id=parent_id)
 
 

@@ -192,10 +192,10 @@ def test_add_status_tool_hands_back_the_valid_classes(monkeypatch):
     monkeypatch.setattr(
         mcp_server.repository,
         "add_status",
-        lambda *a, **k: {"status": "unknown_class", "valid": ["active", "closed", "open", "waiting"]},
+        lambda *a, **k: {"status": "unknown_class", "valid": ["open", "active", "waiting", "closed"]},
     )
     assert mcp_server.add_status("acme", "x", "diagonal")["valid"] == [
-        "active", "closed", "open", "waiting"
+        "open", "active", "waiting", "closed"
     ]
 
 

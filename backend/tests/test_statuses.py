@@ -70,3 +70,11 @@ def test_names_in_accepts_several_classes():
 def test_names_in_rejects_an_unknown_class():
     with pytest.raises(ValueError, match="unknown status class"):
         statuses.names_in("sideways")
+
+
+def test_class_order_is_the_lifecycle_order():
+    assert statuses.CLASS_ORDER == ("open", "active", "waiting", "closed")
+
+
+def test_classes_and_class_order_hold_the_same_names():
+    assert statuses.CLASSES == frozenset(statuses.CLASS_ORDER)

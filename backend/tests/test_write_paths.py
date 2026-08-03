@@ -32,7 +32,7 @@ def test_add_status_reports_duplicate_as_a_dict(project):
 def test_add_status_hands_back_the_valid_classes(project):
     result = repository.add_status(project, "sideways", "diagonal")
     assert result["status"] == "unknown_class"
-    assert result["valid"] == ["active", "closed", "open", "waiting"]
+    assert result["valid"] == ["open", "active", "waiting", "closed"]
 
 
 def test_add_status_reports_a_blank_name_as_a_dict(project):
@@ -126,6 +126,36 @@ def test_create_folder_reports_an_unknown_project():
     }
 
 
+def test_create_folder_rejects_a_blank_name(project):
+    assert repository.create_folder(project, "   ") == {"status": "invalid_name"}
+
+
+def test_create_folder_rejects_a_name_longer_than_the_column(project):
+    """Unguarded, this reached Postgres as a raw DataError — over MCP, a traceback."""
+    assert repository.create_folder(project, "x" * (repository.MAX_FOLDER_NAME + 1)) == {
+        "status": "invalid_name"
+    }
+
+
+def test_create_folder_accepts_a_name_at_the_length_limit(project):
+    result = repository.create_folder(project, "x" * repository.MAX_FOLDER_NAME)
+    assert result["status"] == "added"
+
+
+def test_create_folder_appends_rather_than_prepending(project):
+    first = repository.create_folder(project, "First")["folder_id"]
+    second = repository.create_folder(project, "Second")["folder_id"]
+    from sqlalchemy import select
+
+    from app import models
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        a = db.scalar(select(models.Folder).where(models.Folder.id == first))
+        b = db.scalar(select(models.Folder).where(models.Folder.id == second))
+        assert a.position < b.position
+
+
 # ---- add_item ----
 
 def test_add_item_returns_the_new_id(project):
@@ -187,3 +217,34 @@ def test_add_item_rejects_a_folder_from_another_project(project, temp_slug_b):
 
 def test_add_item_reports_an_unknown_project():
     assert repository.add_item("no-such-project-xyz", "x") == {"status": "unknown_project"}
+
+
+def test_add_item_appends_rather_than_prepending(project):
+    """A new item must not jump ahead of work the user already ordered."""
+    first = repository.add_item(project, "first")["item_id"]
+    second = repository.add_item(project, "second")["item_id"]
+    titles = [i["title"] for i in repository.list_items(project)]
+    assert titles.index("first") < titles.index("second")
+
+
+def test_the_first_item_in_an_empty_project_is_position_zero(project):
+    from sqlalchemy import select
+
+    from app import models
+    from app.db import SessionLocal
+
+    item_id = repository.add_item(project, "only")["item_id"]
+    with SessionLocal() as db:
+        item = db.scalar(select(models.Item).where(models.Item.id == item_id))
+        assert item.position == 0
+
+
+def test_add_item_appends_after_imported_items(project):
+    """import_items assigns 0..n; an agent's item must land after them, not among them."""
+    repository.import_items(
+        project,
+        [{"title": f"imported-{n}", "status": "todo", "folder": None} for n in range(3)],
+    )
+    repository.add_item(project, "agent-added")
+    titles = [i["title"] for i in repository.list_items(project)]
+    assert titles[-1] == "agent-added"

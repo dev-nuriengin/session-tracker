@@ -121,6 +121,10 @@ def add_folder(
         typer.echo(f"✓ folder #{result['folder_id']} added to {project}")
         return
     messages = {
+        "invalid_name": (
+            f"a folder name cannot be blank or longer than "
+            f"{repository.MAX_FOLDER_NAME} characters"
+        ),
         "unknown_parent": f"unknown parent folder #{parent} in '{project}'",
         "unknown_project": f"unknown project '{project}'",
     }

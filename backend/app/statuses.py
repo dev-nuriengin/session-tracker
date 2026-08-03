@@ -22,7 +22,12 @@ ACTIVE = "active"      # someone is on it — `whats_next` reports it
 WAITING = "waiting"    # started, not actionable now — skipped, but counted
 CLOSED = "closed"      # finished or abandoned — hidden by default
 
-CLASSES = frozenset({OPEN, ACTIVE, WAITING, CLOSED})
+# The lifecycle order — used everywhere a human or agent READS the classes (CLI
+# help, MCP tool docstrings, `add_status`'s returned `valid` list). CLASSES stays
+# a frozenset for membership tests; deriving it from this tuple means the two can
+# never disagree.
+CLASS_ORDER = (OPEN, ACTIVE, WAITING, CLOSED)
+CLASSES = frozenset(CLASS_ORDER)
 
 # A queue offers anything that is NOT `waiting` and NOT `closed` — a complement,
 # not an allowlist. The deliberate consequence: a status this vocabulary cannot
