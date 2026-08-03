@@ -187,19 +187,31 @@ def add_memory(
     kind: str = "note",
     title: str | None = None,
     url: str | None = None,
+    path: str | None = None,
+    item_id: int | None = None,
+    folder_id: int | None = None,
 ) -> dict:
     """Save a durable fact to the project's memory — a repo link, a note, a meeting
-    transcript. kind: link | note | transcript.
+    transcript, or a pointer to a local file. kind: link | note | transcript | file.
+
+    For `kind="file"`: ask the user where the file is, then pass its path here.
+    Trackden only stores the path — it never creates, moves, or reads the file itself.
+    `path` is required for `kind="file"`.
+
+    Pass `item_id` when the fact is about one specific item (a bug, a ticket), so it
+    doesn't sit in a pile with every other item's memory. Leave it out for a
+    project-level fact. `item_id` and `folder_id` are validated against this project.
+
     NOT for decisions: those go to add_decision, which writes them to the project's
     decisions guidance file so each fact has exactly one home.
-    `status` tells you what you got: saved · unknown_project · rejected_kind."""
-    try:
-        saved = repository.add_memory(project, content, kind=kind, title=title, url=url)
-    except ValueError as exc:
-        return {"status": "rejected_kind", "message": str(exc)}
-    if not saved:
-        return {"status": "unknown_project", "message": f"unknown project {project!r}"}
-    return {"status": "saved", "message": ""}
+
+    Returns the outcome unchanged: status is one of saved · missing_path ·
+    rejected_kind (with `valid` and `message`) · unknown_item · unknown_folder ·
+    unknown_project."""
+    return repository.add_memory(
+        project, content, kind=kind, title=title, url=url,
+        path=path, item_id=item_id, folder_id=folder_id,
+    )
 
 
 if __name__ == "__main__":

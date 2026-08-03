@@ -116,25 +116,26 @@ def test_import_items_reuses_a_folder_created_out_of_band(temp_slug):
 @pytest.mark.db
 def test_add_memory_rejects_the_decision_kind(temp_slug):
     repository.create_project(temp_slug)
-    with pytest.raises(ValueError) as excinfo:
-        repository.add_memory(temp_slug, "we chose X", kind="decision")
-    assert "add_decision" in str(excinfo.value)
+    result = repository.add_memory(temp_slug, "we chose X", kind="decision")
+    assert result["status"] == "rejected_kind"
+    assert "add_decision" in result["message"]
 
 
 @pytest.mark.db
 def test_add_memory_still_accepts_its_remaining_kinds(temp_slug):
     repository.create_project(temp_slug)
     for kind in ("link", "note", "transcript"):
-        assert repository.add_memory(temp_slug, f"a {kind}", kind=kind) is True
+        assert repository.add_memory(temp_slug, f"a {kind}", kind=kind)["status"] == "saved"
 
 
 @pytest.mark.db
 def test_add_memory_rejects_an_unknown_kind(temp_slug):
     repository.create_project(temp_slug)
-    with pytest.raises(ValueError):
-        repository.add_memory(temp_slug, "x", kind="nonsense")
+    assert repository.add_memory(temp_slug, "x", kind="nonsense")["status"] == "rejected_kind"
 
 
 @pytest.mark.db
-def test_add_memory_returns_false_for_an_unknown_project():
-    assert repository.add_memory("no-such-project-xyz", "x", kind="note") is False
+def test_add_memory_reports_unknown_project_for_an_unknown_project():
+    assert repository.add_memory("no-such-project-xyz", "x", kind="note") == {
+        "status": "unknown_project"
+    }

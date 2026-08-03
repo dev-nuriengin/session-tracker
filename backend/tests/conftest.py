@@ -71,6 +71,27 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return workspace
 
 
+def _delete_project_cascading(db, project) -> None:
+    """Delete a project and everything under it.
+
+    `Memory.item_id` / `Memory.folder_id` reference `tracking_items` / `folders`, but
+    Memory has no declared ORM relationship to Item or Folder — only to Project — so
+    the unit of work has no way to know a memory row must be removed before the item
+    or folder it points at. Left to `db.delete(project)` alone, the ORM's per-relationship
+    cascade (`Project.items`, `Project.memory`, …) can delete a referenced tracking_item
+    before the memory row pointing at it, raising a FK violation. Harmless before Task 2
+    (item_id/folder_id were always NULL); real now that add_memory populates them.
+    Bulk-deleting memory first sidesteps the ordering question entirely.
+    """
+    from sqlalchemy import delete
+
+    from app import models
+
+    db.execute(delete(models.Memory).where(models.Memory.project_id == project.id))
+    db.delete(project)  # cascades to folders / items / sessions
+    db.commit()
+
+
 @pytest.fixture
 def temp_slug():
     """A project slug that is deleted from the (test) DB afterwards (db-marked tests)."""
@@ -84,8 +105,7 @@ def temp_slug():
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug))
         if project is not None:
-            db.delete(project)  # cascades to folders / items / sessions / memory
-            db.commit()
+            _delete_project_cascading(db, project)
 
 
 @pytest.fixture
@@ -101,8 +121,7 @@ def temp_slug_b():
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug))
         if project is not None:
-            db.delete(project)  # cascades to folders / items / sessions / memory
-            db.commit()
+            _delete_project_cascading(db, project)
 
 
 def _server_reachable(admin_url) -> bool:

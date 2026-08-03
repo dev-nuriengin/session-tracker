@@ -498,29 +498,85 @@ def set_status(slug: str, item_id: int, status: str) -> dict:
         return {"status": "set", "from": previous, "to": status}
 
 
-# ---- durable memory (links, notes, transcripts) ----
+# ---- durable memory (links, notes, transcripts, files) ----
 
-# Decisions deliberately absent: they belong in the project's `_decisions.md`, not the
-# DB. The storage model routes by intent — the tool IS the destination — so accepting
-# a decision here as well would give an agent two homes for one datum.
-MEMORY_KINDS = frozenset({"link", "note", "transcript"})
+# `file` points at a local artifact — a findings file, a meeting recording, an HTML
+# dump. Decisions remain deliberately absent: they belong in the project's
+# `_decisions.md`, and the storage model routes by intent, so accepting one here
+# would give an agent two homes for one datum.
+MEMORY_KINDS = frozenset({"link", "note", "transcript", "file"})
 
 
 def add_memory(slug: str, content: str, kind: str = "note", title: str | None = None,
-               url: str | None = None) -> bool:
+               url: str | None = None, path: str | None = None,
+               item_id: int | None = None, folder_id: int | None = None) -> dict:
+    """Save a durable fact to a project's memory. Returns an outcome, never raises.
+
+    Outcomes: saved (optionally with `warning`) · missing_path · rejected_kind (with
+    `valid` and a `message`) · unknown_item · unknown_folder · unknown_project
+
+    `item_id` scopes the fact to one item, so a bug's findings stop sitting in a pile
+    with every other bug's. It is validated against THIS project: a ForeignKey proves
+    a row exists, never that it belongs here.
+
+    `kind="file"` requires `path` and stores it expanded and absolute, so the pointer
+    survives a different working directory. A path that does not exist is stored WITH
+    a warning rather than refused — the user may be recording where something is about
+    to go. Trackden never creates, moves or reads the file.
+    """
     if kind not in MEMORY_KINDS:
-        hint = " — use `add_decision`, which writes to the project's `_decisions.md`" if kind == "decision" else ""
-        raise ValueError(
-            f"unsupported memory kind {kind!r}; expected one of "
-            f"{', '.join(sorted(MEMORY_KINDS))}{hint}"
+        hint = (
+            " — use `add_decision`, which writes to the project's `_decisions.md`"
+            if kind == "decision" else ""
         )
+        return {
+            "status": "rejected_kind",
+            "valid": sorted(MEMORY_KINDS),
+            "message": (
+                f"unsupported memory kind {kind!r}; expected one of "
+                f"{', '.join(sorted(MEMORY_KINDS))}{hint}"
+            ),
+        }
+    if kind == "file" and not path:
+        return {"status": "missing_path"}
+
+    resolved = None
+    warning = None
+    if path:
+        candidate = Path(path).expanduser()
+        resolved = str(candidate.resolve())
+        if not candidate.exists():
+            warning = "path not found"
+
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
-            return False
-        db.add(models.Memory(project_id=project.id, content=content, kind=kind, title=title, url=url))
+            return {"status": "unknown_project"}
+
+        if item_id is not None:
+            owned = db.scalar(
+                select(models.Item).where(
+                    models.Item.id == item_id, models.Item.project_id == project.id
+                )
+            )
+            if owned is None:
+                return {"status": "unknown_item"}
+
+        if folder_id is not None:
+            owned = db.scalar(
+                select(models.Folder).where(
+                    models.Folder.id == folder_id, models.Folder.project_id == project.id
+                )
+            )
+            if owned is None:
+                return {"status": "unknown_folder"}
+
+        db.add(models.Memory(
+            project_id=project.id, item_id=item_id, folder_id=folder_id,
+            content=content, kind=kind, title=title, url=url, path=resolved,
+        ))
         db.commit()
-        return True
+        return {"status": "saved", "warning": warning} if warning else {"status": "saved"}
 
 
 def list_memory(slug: str) -> list[dict]:
@@ -533,7 +589,13 @@ def list_memory(slug: str) -> list[dict]:
             .where(models.Memory.project_id == project.id)
             .order_by(models.Memory.created_at.desc())
         ).all()
-        return [{"kind": m.kind, "title": m.title, "content": m.content, "url": m.url} for m in rows]
+        return [
+            {
+                "kind": m.kind, "title": m.title, "content": m.content, "url": m.url,
+                "path": m.path, "item_id": m.item_id,
+            }
+            for m in rows
+        ]
 
 
 # ---- sessions & continuity ----

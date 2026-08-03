@@ -162,12 +162,18 @@ def test_decide_exits_non_zero_for_an_invalid_slug(monkeypatch):
 
 
 def test_remember_rejects_the_decision_kind_pointing_at_decide(monkeypatch):
-    def fake_add_memory(project, content, kind="note", title=None, url=None):
+    def fake_add_memory(project, content, kind="note", title=None, url=None,
+                         path=None, item_id=None, folder_id=None):
         assert kind == "decision"
-        raise ValueError(
-            "unsupported memory kind 'decision'; expected one of link, note, transcript"
-            " — use `add_decision`, which writes to the project's `_decisions.md`"
-        )
+        return {
+            "status": "rejected_kind",
+            "valid": ["file", "link", "note", "transcript"],
+            "message": (
+                "unsupported memory kind 'decision'; expected one of "
+                "file, link, note, transcript"
+                " — use `add_decision`, which writes to the project's `_decisions.md`"
+            ),
+        }
 
     monkeypatch.setattr(repository_mod, "add_memory", fake_add_memory)
     result = runner.invoke(app, ["remember", "korpus", "we chose X", "--kind", "decision"])
@@ -177,10 +183,16 @@ def test_remember_rejects_the_decision_kind_pointing_at_decide(monkeypatch):
 
 
 def test_remember_rejects_an_arbitrary_bad_kind(monkeypatch):
-    def fake_add_memory(project, content, kind="note", title=None, url=None):
-        raise ValueError(
-            "unsupported memory kind 'nonsense'; expected one of link, note, transcript"
-        )
+    def fake_add_memory(project, content, kind="note", title=None, url=None,
+                         path=None, item_id=None, folder_id=None):
+        return {
+            "status": "rejected_kind",
+            "valid": ["file", "link", "note", "transcript"],
+            "message": (
+                "unsupported memory kind 'nonsense'; expected one of "
+                "file, link, note, transcript"
+            ),
+        }
 
     monkeypatch.setattr(repository_mod, "add_memory", fake_add_memory)
     result = runner.invoke(app, ["remember", "korpus", "x", "--kind", "nonsense"])
@@ -190,14 +202,14 @@ def test_remember_rejects_an_arbitrary_bad_kind(monkeypatch):
 
 
 def test_remember_exits_non_zero_for_an_unknown_project(monkeypatch):
-    monkeypatch.setattr(repository_mod, "add_memory", lambda *a, **k: False)
+    monkeypatch.setattr(repository_mod, "add_memory", lambda *a, **k: {"status": "unknown_project"})
     result = runner.invoke(app, ["remember", "bogus-project", "x"])
     assert result.exit_code == 1
     assert "bogus-project" in result.output
 
 
 def test_remember_saves_and_reports_success(monkeypatch):
-    monkeypatch.setattr(repository_mod, "add_memory", lambda *a, **k: True)
+    monkeypatch.setattr(repository_mod, "add_memory", lambda *a, **k: {"status": "saved"})
     result = runner.invoke(app, ["remember", "korpus", "x", "--kind", "link"])
     assert result.exit_code == 0, result.output
     assert "✓" in result.output

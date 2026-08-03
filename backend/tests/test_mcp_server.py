@@ -63,7 +63,11 @@ def test_add_decision_delegates_to_guidance(monkeypatch):
 
 def test_add_memory_reports_a_rejected_kind_instead_of_raising(monkeypatch):
     def fake_add_memory(*args, **kwargs):
-        raise ValueError("unsupported memory kind 'decision' — use `add_decision`")
+        return {
+            "status": "rejected_kind",
+            "valid": ["file", "link", "note", "transcript"],
+            "message": "unsupported memory kind 'decision' — use `add_decision`",
+        }
 
     monkeypatch.setattr(mcp_server.repository, "add_memory", fake_add_memory)
     result = mcp_server.add_memory("korpus", "we chose X", kind="decision")
@@ -71,17 +75,38 @@ def test_add_memory_reports_a_rejected_kind_instead_of_raising(monkeypatch):
     assert "add_decision" in result["message"]
 
 
-def test_add_memory_reports_saved_with_a_message_key(monkeypatch):
-    monkeypatch.setattr(mcp_server.repository, "add_memory", lambda *a, **k: True)
+def test_add_memory_reports_saved_as_a_thin_pass_through(monkeypatch):
+    monkeypatch.setattr(mcp_server.repository, "add_memory", lambda *a, **k: {"status": "saved"})
     result = mcp_server.add_memory("korpus", "a repo link", kind="link")
-    assert result == {"status": "saved", "message": ""}
+    assert result == {"status": "saved"}
 
 
-def test_add_memory_reports_unknown_project_with_a_message_key(monkeypatch):
-    monkeypatch.setattr(mcp_server.repository, "add_memory", lambda *a, **k: False)
+def test_add_memory_reports_unknown_project_as_a_thin_pass_through(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server.repository, "add_memory", lambda *a, **k: {"status": "unknown_project"}
+    )
     result = mcp_server.add_memory("bogus-project", "x")
-    assert result["status"] == "unknown_project"
-    assert "bogus-project" in result["message"]
+    assert result == {"status": "unknown_project"}
+
+
+def test_add_memory_delegates_path_and_item_id(monkeypatch):
+    seen = {}
+
+    def fake_add_memory(project, content, kind="note", title=None, url=None,
+                         path=None, item_id=None, folder_id=None):
+        seen.update(
+            project=project, content=content, kind=kind, title=title, url=url,
+            path=path, item_id=item_id, folder_id=folder_id,
+        )
+        return {"status": "saved"}
+
+    monkeypatch.setattr(mcp_server.repository, "add_memory", fake_add_memory)
+    result = mcp_server.add_memory(
+        "korpus", "findings.md has it", kind="file", path="/tmp/findings.md", item_id=42
+    )
+    assert seen["path"] == "/tmp/findings.md"
+    assert seen["item_id"] == 42
+    assert result == {"status": "saved"}
 
 
 def test_set_status_is_registered_as_a_tool():

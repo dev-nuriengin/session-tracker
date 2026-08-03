@@ -215,6 +215,57 @@ def test_log_exits_non_zero_for_an_unknown_project(monkeypatch):
     assert runner.invoke(cli_mod.app, ["log", "nope", "did a thing"]).exit_code == 1
 
 
+def test_remember_reports_saved_with_the_warning_line(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "add_memory",
+        lambda *a, **k: {"status": "saved", "warning": "path not found"},
+    )
+    result = runner.invoke(
+        cli_mod.app, ["remember", "acme", "not yet", "--kind", "file", "--path", "later.md"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "✓" in result.output
+    assert "path not found" in result.output
+
+
+def test_remember_kind_file_without_a_path_exits_non_zero(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_memory", lambda *a, **k: {"status": "missing_path"}
+    )
+    result = runner.invoke(cli_mod.app, ["remember", "acme", "x", "--kind", "file"])
+    assert result.exit_code == 1
+    assert "--path" in result.output
+
+
+def test_remember_with_an_unknown_item_exits_non_zero(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_memory", lambda *a, **k: {"status": "unknown_item"}
+    )
+    result = runner.invoke(cli_mod.app, ["remember", "acme", "x", "--item", "999"])
+    assert result.exit_code == 1
+    assert "999" in result.output
+
+
+def test_remember_rejected_kind_prints_the_add_decision_hint(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "add_memory",
+        lambda *a, **k: {
+            "status": "rejected_kind",
+            "valid": ["file", "link", "note", "transcript"],
+            "message": "unsupported memory kind 'decision' — use `add_decision`",
+        },
+    )
+    result = runner.invoke(cli_mod.app, ["remember", "acme", "we chose X", "--kind", "decision"])
+    assert result.exit_code == 1
+    assert "add_decision" in result.output
+
+
 def test_show_reports_the_waiting_count(monkeypatch):
     _no_schema(monkeypatch)
     monkeypatch.setattr(

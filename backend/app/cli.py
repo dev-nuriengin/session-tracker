@@ -219,20 +219,36 @@ def statuses(project: str):
 def remember(
     project: str,
     content: str,
-    kind: str = typer.Option("note", help="link | note | transcript"),
+    kind: str = typer.Option("note", help="link | note | transcript | file"),
     url: str = typer.Option(None, help="Link (e.g. GitLab/GitHub)"),
+    path: str = typer.Option(None, help="Local file path (required for --kind file)"),
+    item: int = typer.Option(None, help="Attach to this item id"),
+    folder: int = typer.Option(None, help="Attach to this folder id"),
     title: str = typer.Option(None),
 ):
-    """Save a durable fact (link / note / transcript) to a project's memory. For a decision use `trackden decide`."""
-    try:
-        ok = repository.add_memory(project, content, kind=kind, title=title, url=url)
-    except ValueError as exc:
-        typer.echo(str(exc))
+    """Save a durable fact (link / note / transcript / file) to a project's memory.
+    For a decision use `trackden decide`."""
+    result = repository.add_memory(
+        project, content, kind=kind, title=title, url=url,
+        path=path, item_id=item, folder_id=folder,
+    )
+    outcome = result["status"]
+    if outcome == "saved":
+        typer.echo("✓ saved to memory")
+        if result.get("warning"):
+            typer.echo(f"  note: {result['warning']}")
+        return
+    if outcome == "rejected_kind":
+        typer.echo(result["message"])
         raise typer.Exit(1)
-    if not ok:
-        typer.echo(f"unknown project '{project}'")
-        raise typer.Exit(1)
-    typer.echo("✓ saved to memory")
+    messages = {
+        "missing_path": "--path is required for --kind file",
+        "unknown_item": f"unknown item #{item} in '{project}'",
+        "unknown_folder": f"unknown folder #{folder} in '{project}'",
+        "unknown_project": f"unknown project '{project}'",
+    }
+    typer.echo(messages[outcome])
+    raise typer.Exit(1)
 
 
 @app.command("eval")
