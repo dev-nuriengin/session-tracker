@@ -19,7 +19,12 @@ VERSION = 1
 # The digest rides inside EVERY `overview` response. That is deliberate: an agent cannot
 # be relied on to call a second tool for the rules, so the rules travel in the payload it
 # already wants. The budget is asserted by a test — see MAX_DIGEST.
-MAX_DIGEST = 1500
+#
+# MAX_DIGEST exists so that growing the digest is a deliberate decision, not a habit —
+# every call to `overview` pays for these bytes. The number itself isn't meaningful;
+# it's a ceiling with enough room that a normal wording fix doesn't force character-
+# shaving, not a target to fill.
+MAX_DIGEST = 1700
 
 DIGEST = """TRACKDEN PLAYBOOK v1
 
@@ -41,8 +46,8 @@ DIGEST = """TRACKDEN PLAYBOOK v1
     with add_memory(kind="file"). Trackden never creates, moves or reads files.
 10. Attach to the item, not the project: add_memory(item_id=...) and
     save_progress(item_id=...). Resume one item with get_history(item_id=...).
-11. The project's way-of-work outranks this playbook - unless it's an
-    untouched template, which outranks nothing.
+11. The project's way-of-work outranks this playbook. Conflict: follow the
+    project - unless it's an untouched template, which outranks nothing.
 """
 
 TEXT = """# Trackden playbook v1
