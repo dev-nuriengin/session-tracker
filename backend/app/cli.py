@@ -12,6 +12,7 @@ import typer
 
 from . import guidance as guidance_mod
 from . import onboard as onboard_mod
+from . import playbook as playbook_mod
 from . import repository
 from .db import init_db
 
@@ -481,6 +482,12 @@ def decide(
         typer.echo(result["message"])
         raise typer.Exit(1)
     typer.echo(f"✓ decision recorded in {result['path']}")
+
+
+@app.command()
+def playbook():
+    """Print Trackden's own rules for using Trackden (what agents read)."""
+    typer.echo(playbook_mod.TEXT)
 
 
 if __name__ == "__main__":

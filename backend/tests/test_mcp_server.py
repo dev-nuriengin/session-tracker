@@ -278,3 +278,21 @@ def test_add_status_description_tells_the_agent_to_offer_not_impose():
     """Rule 6 of the coming playbook: offer a new name, do not invent one."""
     text = mcp_server.add_status.__doc__.lower()
     assert "offer" in text or "ask" in text
+
+
+def test_get_playbook_is_registered():
+    assert mcp_server.mcp._tool_manager.get_tool("get_playbook") is not None
+
+
+def test_get_playbook_returns_the_version_and_the_text():
+    from app import playbook
+
+    result = mcp_server.get_playbook()
+    assert result == {"version": playbook.VERSION, "text": playbook.TEXT}
+
+
+def test_get_playbook_takes_no_arguments():
+    """It is product-wide — it must work before any project exists."""
+    import inspect
+
+    assert not inspect.signature(mcp_server.get_playbook).parameters

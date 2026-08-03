@@ -10,7 +10,7 @@ Wire into Claude Code via the repo's `.mcp.json`.
 
 from mcp.server.fastmcp import FastMCP
 
-from . import guidance, repository
+from . import guidance, playbook, repository
 
 mcp = FastMCP("trackden")
 
@@ -63,6 +63,21 @@ def list_statuses(project: str) -> list[dict]:
     whats_next but still counted) · closed (finished or abandoned, hidden).
     `overview` already includes this — call it only if you need it on its own."""
     return repository.list_statuses(project)
+
+
+@mcp.tool()
+def get_playbook() -> dict:
+    """Trackden's own rules for using Trackden — read this once per session.
+
+    Covers when to save, how to change a status and when to ask first, how to grow a
+    project's status vocabulary, and how files are handled (Trackden stores a path and
+    never touches the file). Takes no arguments: it is the same for every project and
+    works before any project exists.
+
+    A short digest already rides in every `overview` response; call this when you want
+    the reasoning behind it. Note that the project's own way-of-work outranks this
+    document — read it with get_guidance(project, "way-of-work")."""
+    return {"version": playbook.VERSION, "text": playbook.TEXT}
 
 
 @mcp.tool()

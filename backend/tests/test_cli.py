@@ -355,3 +355,16 @@ def test_show_item_exits_non_zero_for_an_unknown_item(monkeypatch):
     result = runner.invoke(cli_mod.app, ["show", "acme", "--item", "999"])
     assert result.exit_code == 1
     assert "999" in result.output
+
+
+def test_playbook_prints_the_rules(monkeypatch):
+    _no_schema(monkeypatch)
+    result = runner.invoke(cli_mod.app, ["playbook"])
+    assert result.exit_code == 0, result.output
+    assert "TRACKDEN PLAYBOOK" in result.output or "Trackden playbook" in result.output
+
+
+def test_playbook_needs_no_project(monkeypatch):
+    """Product-wide: it must not require a project argument."""
+    _no_schema(monkeypatch)
+    assert runner.invoke(cli_mod.app, ["playbook"]).exit_code == 0
