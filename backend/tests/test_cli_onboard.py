@@ -189,3 +189,40 @@ def test_onboard_empty_slug_exits_cleanly_without_a_traceback(home, fake_db):
     assert result.output.strip() != ""
     assert "Slug cannot be empty" in result.output
     assert fake_db["projects"] == set()
+
+
+def test_onboard_prints_a_paste_ready_snippet_without_writing_to_the_repo(
+    home, fake_db, tmp_path
+):
+    """Trackden never writes to the user's repo — it prints, the user pastes.
+
+    This is the promise `workspace.py`'s header makes ("the user's repos stay
+    untouched"); onboarding is where that promise is easiest to break by accident,
+    so it gets a direct test: snapshot the scanned repo's contents before and after,
+    and assert nothing moved.
+    """
+    repo = tmp_path / "some-repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("hello\n", encoding="utf-8")
+    before = {p.name: p.read_bytes() for p in repo.iterdir()}
+
+    result = runner.invoke(
+        app,
+        [
+            "onboard",
+            "snippet-demo",
+            "--name",
+            "Snippet Demo",
+            "--repo",
+            str(repo),
+            "--no-import",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "trackden" in result.output.lower()
+    assert "overview" in result.output
+    assert "snippet-demo" in result.output
+
+    after = {p.name: p.read_bytes() for p in repo.iterdir()}
+    assert after == before, "onboard must not write to the scanned repo"

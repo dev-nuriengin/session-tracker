@@ -453,6 +453,15 @@ def onboard(
         typer.echo("  ⚠ workspace is not a git repo (git unavailable) — guidance is unversioned")
     typer.echo(f"\nNext:  trackden show {result.slug}")
 
+    typer.echo(
+        "\n  Paste into this repo's CLAUDE.md / AGENTS.md if you want agents to find it:\n"
+        "\n"
+        f'    This project is tracked in Trackden. Call `overview("{result.slug}")` first —\n'
+        "    it carries the next step, the valid statuses, and Trackden's playbook digest.\n"
+        "\n"
+        "  (Trackden never writes to your repo. Copy it yourself, or don't.)"
+    )
+
 
 @app.command()
 def guidance(
