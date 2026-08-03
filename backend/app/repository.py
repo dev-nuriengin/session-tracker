@@ -95,7 +95,7 @@ def get_status(slug: str) -> str:
         return f"{project.name}: NEXT — {nxt.title}{tail}"
 
 
-def overview(slug: str) -> dict:
+def overview(slug: str, include_playbook: bool = False) -> dict:
     """The cheap FIRST look — a compact summary, not a full dump. Counts + a few
     titles + last activity + the valid status vocabulary. Drill deeper with
     list_items / list_memory / get_history.
@@ -103,6 +103,11 @@ def overview(slug: str) -> dict:
     Queue: its `next`/`open_preview` are "what to do next", not an inventory of
     everything on the list — anything not `waiting` and not `closed` qualifies,
     including a status this vocabulary cannot classify (offered on purpose).
+
+    `include_playbook` gates the `playbook` key. It defaults to False because the
+    CLI and the FastAPI endpoint (`GET /projects/{slug}`) share this payload with
+    the web UI, which has no use for agent-steering prose — the digest is meant
+    for the agent door only. The MCP `overview` tool passes True.
     """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
@@ -131,7 +136,7 @@ def overview(slug: str) -> dict:
             .where(models.Session.project_id == project.id)
             .order_by(models.SessionLog.created_at.desc())
         )
-        return {
+        result = {
             "project": project.slug,
             "next": open_titles[0] if open_titles else None,
             "open_items": len(open_titles),
@@ -142,11 +147,14 @@ def overview(slug: str) -> dict:
             # the valid vocabulary travels with the summary, so a caller never has
             # to guess a status name — and never needs a second round trip to check
             "statuses": [{"name": n, "behaves_as": c} for n, c in vocabulary.items()],
+        }
+        if include_playbook:
             # The rules ride in the payload an agent already fetches: it cannot be relied
             # on to call get_playbook() for them. Steering, not a guarantee — the
-            # guarantee is a SessionStart hook, which is a separate increment.
-            "playbook": {"version": playbook.VERSION, "digest": playbook.DIGEST},
-        }
+            # guarantee is a SessionStart hook, which is a separate increment. Opt-in
+            # only: the web UI polls this same shape and has no use for agent prose.
+            result["playbook"] = {"version": playbook.VERSION, "digest": playbook.DIGEST}
+        return result
 
 
 def list_items(slug: str, include_done: bool = False) -> list[dict]:

@@ -173,13 +173,25 @@ def test_an_unrecognised_status_is_offered_as_the_next_step(temp_slug):
 
 
 def test_overview_carries_the_playbook_digest(project):
-    """An agent must not have to call a second tool to learn the rules."""
+    """An agent must not have to call a second tool to learn the rules.
+
+    Only true for the agent door: `include_playbook=True` is what the MCP
+    `overview` tool passes.
+    """
     from app import playbook
 
     slug, _ = project
-    carried = repository.overview(slug)["playbook"]
+    carried = repository.overview(slug, include_playbook=True)["playbook"]
     assert carried["version"] == playbook.VERSION
     assert carried["digest"] == playbook.DIGEST
+
+
+def test_overview_default_omits_the_playbook(project):
+    """The CLI and the FastAPI endpoint share this shape with the web UI, which
+    has no use for agent-steering prose on every poll — so the digest is opt-in,
+    not a default. Pins the door separation rather than assuming it."""
+    slug, _ = project
+    assert "playbook" not in repository.overview(slug)
 
 
 def test_overview_keeps_every_pre_existing_key(project):
@@ -193,5 +205,6 @@ def test_overview_keeps_every_pre_existing_key(project):
 
 
 def test_an_unknown_project_still_returns_an_empty_dict():
-    """The digest must not turn a miss into a hit."""
+    """The digest must not turn a miss into a hit — true with either flag value."""
     assert repository.overview("no-such-project-xyz") == {}
+    assert repository.overview("no-such-project-xyz", include_playbook=True) == {}

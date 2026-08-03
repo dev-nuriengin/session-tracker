@@ -29,7 +29,7 @@ def overview(project: str) -> dict:
     digest. It is cheap and does NOT dump everything. Drill deeper with list_items /
     list_memory only if you need to, and call get_playbook() for the playbook's
     full text."""
-    return repository.overview(project)
+    return repository.overview(project, include_playbook=True)
 
 
 @mcp.tool()

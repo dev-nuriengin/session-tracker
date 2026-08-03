@@ -4,8 +4,6 @@ The sharpest test here is `test_every_tool_the_text_names_actually_exists`: a ru
 telling an agent to call something that is not there is worse than no rule at all.
 """
 
-import pytest
-
 from app import playbook
 
 

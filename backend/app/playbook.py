@@ -30,7 +30,7 @@ DIGEST = """TRACKDEN PLAYBOOK v1
 4.  Work not yet tracked? add_item() it before you start. Ask before inventing
     folders - the shape of the user's work is theirs, not yours.
 5.  Status: set `doing` freely and silently. Announce a `waiting` change in one
-    line. ASK before you close anything.
+    line. ASK before you close anything, unless the user just said it's done.
 6.  Never invent a status name - `statuses` in this payload is the valid set. If
     an item comes back with a name that is NOT in it, that is deliberate: an
     unclassifiable status is surfaced so a human can fix it. Offer to fix it.
@@ -38,10 +38,11 @@ DIGEST = """TRACKDEN PLAYBOOK v1
     not "blocked"), offer add_status(), and explain what the CLASS does.
 8.  A decision needs its reason: add_decision(decision, because).
 9.  Files stay in the user's folders. Ask where it goes, then record the path
-    with add_memory(kind="file"). Never create, move or read anything.
+    with add_memory(kind="file"). Trackden never creates, moves or reads files.
 10. Attach to the item, not the project: add_memory(item_id=...) and
     save_progress(item_id=...). Resume one item with get_history(item_id=...).
-11. The project's way-of-work outranks this playbook. Conflict: follow the project.
+11. The project's way-of-work outranks this playbook - unless it's an
+    untouched template, which outranks nothing.
 """
 
 TEXT = """# Trackden playbook v1
@@ -87,7 +88,7 @@ Four triggers. Any one of them is enough:
 - **The user says save.**
 
 You cannot reliably tell how much time has passed, so do not try to save "every N
-minutes". `overview` reports last activity — if the gap looks long, mention it.
+minutes".
 
 ## 4. Statuses
 
@@ -148,7 +149,8 @@ and rejects `decision` — use `add_decision`, so a decision has exactly one hom
 ## 7. Precedence and anti-patterns
 
 **The project's `_way-of-work.md` outranks this playbook.** Where they conflict, follow
-the project. This document is a default, not an authority.
+the project. This document is a default, not an authority. An untouched template (see
+`template` in section 2) is not filled in yet, so it outranks nothing.
 
 Do not:
 
