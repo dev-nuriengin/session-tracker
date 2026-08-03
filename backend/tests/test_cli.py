@@ -357,11 +357,14 @@ def test_show_item_exits_non_zero_for_an_unknown_item(monkeypatch):
     assert "999" in result.output
 
 
-def test_playbook_prints_the_rules(monkeypatch):
+def test_playbook_prints_the_full_text_not_just_the_digest(monkeypatch):
     _no_schema(monkeypatch)
     result = runner.invoke(cli_mod.app, ["playbook"])
     assert result.exit_code == 0, result.output
-    assert "TRACKDEN PLAYBOOK" in result.output or "Trackden playbook" in result.output
+    # Section headings exist only in TEXT, never in DIGEST — so this fails if the
+    # command ever echoes DIGEST by mistake.
+    assert "Precedence and anti-patterns" in result.output
+    assert "Files and the hybrid rule" in result.output
 
 
 def test_playbook_needs_no_project(monkeypatch):
