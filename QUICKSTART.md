@@ -110,10 +110,12 @@ restart so it loads). Your agent now has these tools:
 | `add_item` | create a new item — an agent can put work into the tracker itself |
 | `add_folder` | create a new (optionally nested) folder |
 | `add_status` | add a project-specific status name, with the behaviour class it follows |
+| `get_playbook` | Trackden's own rules for using Trackden — full text, version, no arguments, works before any project exists. A short digest already rides inside every `overview` response, so you get the reminder without a second call |
 
-Tool count stays at 16 — the new parameters above (`item_id`, `folder_id`, `path` on
-`add_memory`; `item_id` on `save_progress` and `get_history`) extend existing tools rather
-than adding new ones.
+Tool count was 16 through the item-scoping work above — those parameters (`item_id`,
+`folder_id`, `path` on `add_memory`; `item_id` on `save_progress` and `get_history`) extend
+existing tools rather than adding new ones. `get_playbook` is the one genuinely new tool:
+16 → 17.
 
 > 💡 Try it: ask your agent *"what's the history of my-first-project?"* — it calls
 > `get_history` and answers from the tracker, not from guesswork.

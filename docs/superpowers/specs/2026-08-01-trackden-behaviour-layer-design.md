@@ -65,7 +65,7 @@ ends green and is independently useful; none leaves the tracker in a worse state
 | **A — unblock the loop** | `statuses.py` · `item_statuses` table · `set_status` on all three doors · `add_status` (repository + CLI) · the open-semantics change · the `_tracker.md` render rule | Fixes the blocker by itself. After Stage A the core loop works: items move, `whats_next` advances, the mirror tracks. Nothing here depends on the playbook. |
 | **B1 — an agent can create work ✅ delivered 2026-08-03** | `add_item` · `add_folder` (wraps repository `create_folder`) · the MCP `add_status` tool, plus the hardening each needed: `add_status` closes a check-then-insert race, `create_folder`/`add_item` validate that `parent_id`/`folder_id` belong to the same project, and `add_item` takes an optional starting `status` validated against the project's vocabulary | Needs only Stage A's vocabulary (`unknown_status`/`unknown_class`) — not item scoping, not the playbook. An agent can put work into the tracker with nothing else in Stage B built yet. |
 | **B2 — item scoping ✅ delivered 2026-08-03** | the `file` memory kind (`memory.path`) · item-scoped memory and logs (`memory.item_id`, `session_logs.item_id`) · `get_history(item_id=…)` · CLI flags `--item`/`--path` · fixed a real cross-project bug found along the way (`add_session_log` resolved its session by `thread_id` alone, with no project filter) | Independent of B1 and B3 — wires a finding to the item it belongs to, and needs neither the write-side tools nor the playbook to work. |
-| **B3 — teach the agent** | `playbook.py` · `get_playbook` + the digest in `overview` · `trackden playbook` · the onboard print | Comes last on purpose: rules 8 and 9 tell an agent to use `add_memory(kind="file")` and to attach work to the item it belongs to — both B2 deliverables. Writing those rules before B1 and B2 ship would document tools that don't exist yet. |
+| **B3 — teach the agent ✅ delivered 2026-08-03** | `playbook.py` · `get_playbook` + the digest in `overview` · `trackden playbook` · the onboard print | Comes last on purpose: rules 8 and 9 tell an agent to use `add_memory(kind="file")` and to attach work to the item it belongs to — both B2 deliverables. Writing those rules before B1 and B2 ship would document tools that don't exist yet. |
 
 Stage B was split into B1/B2/B3 during planning because the three are independent of one
 another — B1 and B2 share no code and can ship in either order — while B3 is sequenced last
@@ -187,6 +187,34 @@ TRACKDEN PLAYBOOK v1
 9.  Attach work to the item, not the project, when it belongs to one item.
 10. The project's way-of-work outranks this playbook. Conflict → follow the project.
 ```
+
+### Corrections after B3 shipped (2026-08-03)
+
+The ten-rule digest above is the original draft and is left as written, for history. Three
+things it got wrong, corrected here rather than silently rewritten:
+
+1. **Rule 5 was incomplete.** "Never invent a status name" said nothing about what happens
+   when an item's *stored* status matches no name in the vocabulary at all — a legacy row,
+   or one set by hand in `psql`. The repo owner's ruling (made while building Stage A) is
+   that such an item is **deliberately** offered as the next step, on purpose, so a human
+   notices it and fixes it — it is not a bug to hide. The shipped digest says so and tells
+   the agent what to do about it: "If an item comes back with a name that is NOT in it, that
+   is deliberate: an unclassifiable status is surfaced so a human can fix it. Offer to fix
+   it." (`playbook.py`, rule 6; the full text repeats it under "Statuses".)
+2. **No rule covered creating work.** `add_item`, `add_folder` and `add_status` did not
+   exist yet when this draft was written — they shipped in Stage B1 (2026-08-03) — so the
+   draft had nothing telling an agent to track work before starting it. The shipped digest
+   adds this as rule 4: "Work not yet tracked? add_item() it before you start. Ask before
+   inventing folders - the shape of the user's work is theirs, not yours."
+3. **The digest budget is 1500 characters, not 1200.** The Testing table below originally
+   asserted "stays under 1200 characters." The eleven shipped rules need 1411 characters
+   (verified: `len(playbook.DIGEST) == 1411`), so both `playbook.MAX_DIGEST` and
+   `test_playbook.py`'s assertion use 1500 — about 375 tokens landing inside every
+   `overview` call.
+
+The shipped source of truth is `backend/app/playbook.py` — eleven rules in `DIGEST`, seven
+sections in `TEXT`. This section exists so the draft above stays legible as history instead
+of being quietly edited to match.
 
 ### Why the digest rides in `overview` rather than waiting to be fetched
 
@@ -450,7 +478,7 @@ branch; these three were deliberately left, and this is the increment that touch
 | File | Kind | Covers |
 |---|---|---|
 | `test_statuses.py` | pure | class mapping · the four classes are closed · defaults resolve when a project has no rows · name validation |
-| `test_playbook.py` | pure | version present · **digest stays under 1200 characters** (it rides in *every* `overview`, so the budget is asserted, not hoped for) · all ten rules present · text importable from the installed package |
+| `test_playbook.py` | pure | version present · **digest stays under 1500 characters** (corrected from the 1200 first stated here — see "Corrections after B3 shipped" above; it rides in *every* `overview`, so the budget is asserted, not hoped for) · all eleven rules present (corrected from ten, once creating-work and the unclassifiable-status rules were added) · text importable from the installed package |
 | `test_set_status.py` | `@db` | real transitions · `unchanged` · `from`/`to` · unknown item |
 | `test_statuses_db.py` | `@db` | `add_status` · duplicate name · a custom name is then usable by `set_status` |
 | `test_open_semantics.py` | `@db` | **regression guard** — one item per class, then `whats_next` returns only `open`, skips `waiting`, counts it; `list_items` and `overview` agree |

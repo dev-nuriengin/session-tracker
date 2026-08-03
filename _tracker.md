@@ -24,24 +24,27 @@ plug into it over MCP so they know where everything stands without you re-explai
 | `trackden show <p> --item <id>` | The whole story of one item: its status, its memory (with file paths), its logs — narrowed to just that item. |
 | `trackden set-status <p> <item> <status>` · `add-status` · `statuses` | Move an item to a new status; add a project-specific status name; list what's valid. |
 | `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
+| `trackden playbook` | Print Trackden's own rules for using Trackden — the full text (seven sections); the same digest already rides inside every `overview` response. Needs no project — works before any project exists. |
 | `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
 | `trackden ask "…"` | Semantic search across every project's session logs. |
 
 **What agents get over MCP:** `overview` (call first — cheap), `get_history`, `list_items`,
 `set_status`, `list_statuses`, `list_memory`, `get_guidance`, `whats_next`, `search`,
 `save_progress`, `add_memory`, `add_decision`, `list_projects`, `add_item`, `add_folder`,
-`add_status`. Tool count stays 16 — Stage B2 added parameters, not tools: `add_memory` gained
-`path`/`item_id`/`folder_id` (a `file` kind, and scoping to the item/folder it belongs to),
-`save_progress` gained `item_id`, and `get_history` gained `item_id` (pass it when resuming
-one item instead of the whole project — its logs, its memory including file paths, its
-status).
+`add_status`, `get_playbook`. Tool count stayed 16 through Stage B2 — B2 added parameters,
+not tools: `add_memory` gained `path`/`item_id`/`folder_id` (a `file` kind, and scoping to
+the item/folder it belongs to), `save_progress` gained `item_id`, and `get_history` gained
+`item_id` (pass it when resuming one item instead of the whole project — its logs, its
+memory including file paths, its status). **Stage B3 adds one genuinely new tool: 16 → 17.**
+`get_playbook()` takes no arguments and works before any project exists — it serves
+Trackden's own rules, not project data.
 
 **Where things live — one home per fact.** DB owns *state* (projects, items, statuses,
 session logs). Files under `~/.trackden/projects/<slug>/` own *guidance* (way-of-work,
 architecture, decisions). `_tracker.md` in that folder is a **generated mirror** of the DB —
 never hand-edit it. pgvector is a derived index, never a source.
 
-**Four behaviours worth knowing** (they were deliberate decisions, not accidents):
+**Five behaviours worth knowing** (they were deliberate decisions, not accidents):
 
 1. **Declining an import is safe.** Say `n` at the gate, read the file yourself, run
    `onboard` again — it offers the same items again. Import only happens while a project
@@ -60,13 +63,23 @@ never hand-edit it. pgvector is a derived index, never a source.
    together. Verified by hand at the CLI, not just in pytest: two throwaway projects, both
    logging on the default `--thread cli`, each `show --full` afterwards showed only its own
    note.
+5. **Every `overview` call now carries Trackden's own playbook digest — Stage B3, shipped
+   2026-08-03.** `overview`'s response gains a ninth key, `playbook: {version, digest}`, so
+   an agent gets steering rules without a second tool call; an unknown project still returns
+   exactly `{}`. The full text (seven sections) is `get_playbook()` / `trackden playbook`.
+   `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md`/`AGENTS.md`
+   pointing at `overview()` and the playbook — it is only ever **printed**, never written;
+   the repo stays untouched (proved by a recursive, directory-safe before/after snapshot of
+   every file in the scanned repo).
 
-**What's still open after Stage B2 — know this before you rely on it:** there is no shipped
-**playbook** yet — an arriving agent has tool descriptions and nothing else, no rule for
-when to save or how to pick a status, and no digest riding inside `overview` (Stage B3). A
-finding now DOES attach to the item it belongs to (the `file` memory kind, item-scoped
-memory/logs, `get_history(item_id=…)` — Stage B2, shipped 2026-08-03) — but nothing yet
-tells an arriving agent to use that. See "▸ NEXT" below.
+**What's still open after Stage B3 — know this before you rely on it:** the playbook now
+ships (`playbook.py`, `get_playbook`, the digest inside every `overview`, `trackden
+playbook`, the onboard paste-snippet — all Stage B3, shipped 2026-08-03), and everything it
+teaches is steering, not a guarantee — nothing forces an agent to read `overview`'s response
+or act on what it says. **The only mechanical guarantee is still unbuilt: the `SessionStart`
+launcher/hook** that would run `trackden overview` automatically at the start of a session.
+Until it exists, continuity depends on the agent (or the user) remembering to call it. See
+"▸ NEXT" below.
 
 **Settled:** an item whose stored status is in no vocabulary (a legacy row, or one set by
 hand in `psql`) is offered as NEXT. A queue query offers anything that is not `waiting`
@@ -144,7 +157,7 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT — Stage B3: teach the agent.**
+**▸ NEXT — the `SessionStart` launcher.**
 
 Stage A unblocked the loop. Stage B1 shipped 2026-08-03: an agent can now create work itself
 — `add_item`, `add_folder`, the MCP `add_status` tool — instead of needing a human at the
@@ -157,15 +170,30 @@ path expanded and absolute; `show --item` narrows to one item's logs and memory;
 `--path` saves with a warning, no `--path` at all exits 1; and the session-lookup bug (below)
 is fixed. See Phase 13 below for exactly what shipped.
 
-One thing is still missing. **Stage B3** ships the **playbook** (`playbook.py` +
-`get_playbook()`, with a digest riding inside every `overview` response so an agent gets the
-rules without a second call), `trackden playbook`, and the onboard paste-snippet. B3 comes
-last on purpose: its rules tell an agent to use `add_memory(kind="file")` and to attach work
-to the item it belongs to — both B2 deliverables — so writing those rules before B2 shipped
-would have been instructions that lied. Not yet built: no `playbook.py`, no `get_playbook`,
-no digest in `overview`, no onboard paste-snippet, and no `SessionStart` launcher (the only
-mechanical guarantee an agent reads any of this). See Phase 13 below and the Stage
-B1/B2/B3 rows of the design spec.
+**Stage B3 shipped 2026-08-03 too — the playbook.** `playbook.py` (pure, product-owned:
+`VERSION = 1`, an eleven-rule `DIGEST` at 1411 of a 1500-character budget, and a
+seven-section `TEXT`), `get_playbook()` (MCP tool count 16 → 17; needs no project, works
+before any project exists), `trackden playbook` (CLI command count 16 → 17), the digest
+riding inside every `overview` response (`playbook: {version, digest}`, a ninth key,
+alongside all eight pre-existing ones — an unknown project still returns exactly `{}`), and
+`trackden onboard` printing a paste-ready snippet for the user's own `CLAUDE.md`/`AGENTS.md`
+— printed only, never written, proved by a recursive before/after snapshot of the whole
+scanned repo. B3 came last on purpose: its rules tell an agent to use `add_memory(kind=
+"file")` and to attach work to the item it belongs to — both B2 deliverables — so writing
+those rules before B2 shipped would have been instructions that lied. One of its own tests
+asks the real MCP tool manager whether every tool the text names actually exists, so the
+playbook cannot drift from the tools it instructs an agent to call. See Phase 13 below and
+the Stage B1/B2/B3 rows of the design spec.
+
+**This closes out Stage B — nothing else in the behaviour-layer spec remains except the
+launcher.** Every layer built across A/B1/B2/B3 is *steering*: docstrings that point back at
+the playbook, a digest that rides along for free, a version number that tells a returning
+agent to re-read. None of it is a *guarantee* — nothing forces an agent to call `overview`
+at all, or to act on what it returns. **The `SessionStart` hook/launcher is the only
+mechanical guarantee: a hook that runs `trackden overview` automatically at the start of a
+session**, so continuity stops depending on an agent (or a human) remembering to ask. It is
+unbuilt and needs its own design — which shell, which agents, per-repo opt-in — see the
+design spec's "Open, and deliberately next".
 
 **Found while building Stage B2 — worth knowing on its own:** a session log used to be
 looked up by `thread_id` alone, with no project filter. The CLI's `--thread` defaults to
@@ -189,22 +217,45 @@ then `db.delete(project)`. A future `trackden delete` needs the same explicit bu
 not just `db.delete(project)`) · then dogfooding becomes real: onboard this repo into
 itself, tick items through the tool instead of by hand, retire this file.
 
+**Safety hazard, worth flagging beside `trackden delete` above — it is real and it recurred
+during this stage.** `tests/conftest.py`'s test-database guard (the `_test`/`_smoke` name
+check) protects **pytest runs only**. Any ad-hoc script — `uv run python -c "..."`, a
+throwaway shell one-liner — loads `.env`'s real `DATABASE_URL` like any other code path, and
+nothing stops it writing to the real database. During this stage, exactly that happened: an
+ad-hoc verification script wrote a stray project row into the real Postgres, which holds six
+real projects; it was cleaned up by hand, but the lesson is the guard does not generalise.
+The real fix is a supported `trackden delete` (and, more broadly, never reaching for a raw
+script against a real DB when a read-only path — CLI or `repository` call on an *existing*
+project — will answer the same question). A shipped `delete` command would remove the main
+reason anyone writes such a script in the first place.
+
+**Also open, carried forward:** a folder-scoped reader should derive `folder_id` from the
+item when only `item_id` is given, rather than requiring both — today `add_memory` and
+`add_session_log` accept `item_id` and `folder_id` as two independent optional parameters,
+so a caller who supplies an item but not its folder gets no folder scoping for free.
+
 ---
 
-**Status:** 61 / 72 — all phases 0–13 have shipped their Stage A, Stage B1 and Stage B2
-core. **But "phases done" ≠ "usable day to day":** of the 11 open items, **none are
-life-support blockers any more** — the one gap that used to stop daily use (`set_status`)
-shipped in Stage A, an agent can now create work itself, unprompted (Stage B1, 2026-08-03),
-and a finding now attaches to the item it belongs to instead of just the whole project
-(Stage B2, 2026-08-03). Stage B3 (the playbook) is what remains before an arriving agent
-needs no priming at all. Do not read this line as "finished".
+**Status:** 67 / 74 — all phases 0–13 have shipped their Stage A, Stage B1, Stage B2 and
+Stage B3 core. **But "phases done" ≠ "usable day to day":** of the 7 open items, **none are
+life-support blockers** — the one gap that used to stop daily use (`set_status`) shipped in
+Stage A, an agent can now create work itself, unprompted (Stage B1, 2026-08-03), a finding
+now attaches to the item it belongs to instead of just the whole project (Stage B2,
+2026-08-03), and an arriving agent now gets Trackden's own rules inside the first call it
+makes (Stage B3, 2026-08-03). **This is the whole behaviour-layer spec, done, except one
+thing: the `SessionStart` launcher is the only mechanical guarantee any of it gets read.**
+Do not read this line as "finished".
 
-- 🟡 **Phase 13 Stage B3 — the playbook.** No `playbook.py`, no `get_playbook`, no digest
-  riding inside `overview`, no onboard paste-snippet — an arriving agent still has tool
-  descriptions and nothing else, no rule for when to save or how to pick a status. See
-  "▸ NEXT" above.
-- 🟡 **Phase 11 launcher/alias** — not a blocker, but it is what makes continuity automatic
-  instead of dependent on you remembering to mention Trackden.
+- 🟡 **Phase 11 launcher/alias / `SessionStart` hook — the one real gap left.** Everything
+  shipped through Stage B3 steers an agent toward the rules (docstrings, the `overview`
+  digest, a version number); none of it *guarantees* an agent reads or acts on any of it.
+  A `SessionStart` hook running `trackden overview` automatically would be the guarantee.
+  Needs its own design (which shell, which agents, per-repo opt-in). See "▸ NEXT" above.
+- 🟡 **`trackden delete`** — no way to remove a project yet. Two ORM/FK hazards documented
+  above (`Then, in order`), plus the safety hazard beside it: a supported `delete` would
+  remove the main reason anyone reaches for an ad-hoc script against the real database.
+- 🟡 **Folder-scoped reads don't derive `folder_id` from `item_id`** — carried forward, see
+  "Also open, carried forward" above.
 - Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
   · Phase 11 agent-driven onboard as an MCP tool · Phase 12 `update_guidance` · Phase 12
   guidance indexed in `search` · Phase 12 cwd→project resolution.
@@ -311,7 +362,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `onboard.py` — read-only repo scan, in priority order: `_tracker.md` · `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `**/_tracker.md` · `CLAUDE.md` · `AGENTS.md` (the last two seed `_way-of-work.md`, never treated as sources of truth)
 - [x] `run_onboard` orchestrator: identify → scan+gate → DB project → scaffold → summary; the review gate (y/n/edit, blank = import) only ever runs while a project is itemless, so re-onboarding can't duplicate items
 - [x] `trackden onboard` CLI: interactive wizard + flags (`--name --kind --client --repo --no-import --yes/-y`)
-- [x] pytest enters the repo for the first time (81 tests then; 328 now, after the guidance, Stage A, Stage B1 and Stage B2 branches added more); DB-marked tests auto-skip when Postgres is unreachable
+- [x] pytest enters the repo for the first time (81 tests then; 354 now, after the guidance, Stage A, Stage B1, Stage B2 and Stage B3 branches added more); DB-marked tests auto-skip when Postgres is unreachable
 - [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
 - [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)
 
@@ -364,12 +415,19 @@ provide, so writing them earlier would ship instructions that lie.
 - [x] Also extracted a `_next_position` helper (a deferred minor from B1) and extended `tests/conftest.py`'s test-teardown cascade helper — no ORM relationship links `Memory`/`SessionLog` to `Item`, so teardown had to bulk-delete those rows explicitly before the item (see the `trackden delete` cascade hazard in "▸ NEXT" above, confirmed again by hand while cleaning up this task's own smoke-test projects)
 - [x] Verified end-to-end against the real database (not just pytest): `remember --kind file --path <file> --item <id>` saves with the path absolute; `show --item <id>` shows only that item's logs/memory; a `parked` status (behaves as `waiting`) is counted by `status` but never offered as NEXT; a missing `--path` file saves with a warning; `--kind file` with no `--path` exits 1; the cross-project fix holds at the CLI
 
-### Stage B3 — the playbook (open, comes last on purpose)
-- [ ] `playbook.py` — Trackden's own shipped, read-only rules: full text, a digest, a version — served by `get_playbook()`
-- [ ] The digest riding inside every `overview` response, so the rules land in context without a second call
-- [ ] `trackden playbook` CLI command
-- [ ] `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md` (never written — the repo stays untouched)
+### Stage B3 — the playbook ✅ (shipped 2026-08-03)
+- [x] `playbook.py` — Trackden's own shipped, read-only rules, pure (no DB, no filesystem, no `app.*` imports): `VERSION = 1`, an eleven-rule `DIGEST` (1411 of a 1500-character budget — corrected from an earlier 1200 figure in the spec's draft, see the spec's "Corrections after B3 shipped"), and a seven-section `TEXT` — served by `get_playbook()`. One test asks the real MCP tool manager whether every tool the text names actually exists, so the playbook cannot drift from tools it instructs an agent to call
+- [x] The digest riding inside every `overview` response — a ninth key, `playbook: {version, digest}`, alongside all eight pre-existing keys; an unknown project still returns exactly `{}`
+- [x] MCP tool `get_playbook()` — takes no arguments, works before any project exists (tool count 16 → 17)
+- [x] `trackden playbook` CLI command — prints the full text, needs no project (command count 16 → 17)
+- [x] `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md`/`AGENTS.md` pointing at `overview()` and the playbook digest — **printed, never written**; a recursive, directory-safe before/after snapshot of every file in the scanned repo proves nothing changed
+- [x] **Correction to this plan's own notes:** the B3 plan originally placed the paste-snippet's `print` inside `onboard.py`. That was wrong — `onboard.py` contains no `print` at all; it returns an `OnboardResult` and stays pure I/O-wise. The snippet lives in `cli.py`'s `onboard` command, which already does all the other printing (the summary, the guidance file list) — the better boundary, since `onboard.py` is reused by anything that isn't the CLI
 
-B3 is written last on purpose: its rules tell an agent to use `add_memory(kind="file")` and
+B3 was written last on purpose: its rules tell an agent to use `add_memory(kind="file")` and
 to attach work to the item it belongs to — both are B2 deliverables. Writing those rules
-before B2 ships would tell an agent to call tools that don't exist yet.
+before B2 shipped would have told an agent to call tools that didn't exist yet.
+
+**This closes Stage B and the whole behaviour-layer spec except one thing: the
+`SessionStart` launcher/hook.** Every layer A/B1/B2/B3 shipped is steering — docstrings,
+a digest riding along for free, a version number — none of it is a mechanical guarantee.
+See "▸ NEXT" above.
