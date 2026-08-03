@@ -10,7 +10,7 @@ pytestmark = pytest.mark.db
 @pytest.fixture
 def item(temp_slug):
     repository.create_project(temp_slug, name="Set Status Test")
-    item_id = repository.add_item(temp_slug, "Fix the login redirect loop")
+    item_id = repository.add_item(temp_slug, "Fix the login redirect loop")["item_id"]
     return temp_slug, item_id
 
 

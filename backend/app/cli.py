@@ -129,13 +129,27 @@ def add_folder(
 
 
 @app.command("add-item")
-def add_item(project: str, title: str, folder: int = typer.Option(None, help="Folder id")):
-    """Add a work item to a project (optionally inside a folder)."""
-    iid = repository.add_item(project, title, folder_id=folder)
-    if not iid:
-        typer.echo(f"unknown project '{project}'")
+def add_item(
+    project: str,
+    title: str,
+    folder: int = typer.Option(None, help="Folder id"),
+    status: str = typer.Option(None, help="Starting status (default: todo)"),
+):
+    """Add a work item to a project (optionally inside a folder, at a given status)."""
+    result = repository.add_item(project, title, folder_id=folder, status=status)
+    outcome = result["status"]
+    if outcome == "added":
+        typer.echo(f"✓ item #{result['item_id']} added to {project}")
+        return
+    if outcome == "unknown_status":
+        typer.echo(f"unknown status '{status}'. valid: {', '.join(result['valid'])}")
         raise typer.Exit(1)
-    typer.echo(f"✓ item #{iid} added to {project}")
+    messages = {
+        "unknown_folder": f"unknown folder #{folder} in '{project}'",
+        "unknown_project": f"unknown project '{project}'",
+    }
+    typer.echo(messages[outcome])
+    raise typer.Exit(1)
 
 
 @app.command("set-status")

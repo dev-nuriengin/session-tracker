@@ -124,3 +124,66 @@ def test_create_folder_reports_an_unknown_project():
     assert repository.create_folder("no-such-project-xyz", "Bugs") == {
         "status": "unknown_project"
     }
+
+
+# ---- add_item ----
+
+def test_add_item_returns_the_new_id(project):
+    result = repository.add_item(project, "Fix the login redirect loop")
+    assert result["status"] == "added"
+    assert isinstance(result["item_id"], int)
+
+
+def test_add_item_defaults_to_todo(project):
+    item_id = repository.add_item(project, "untouched")["item_id"]
+    stored = [i for i in repository.list_items(project) if i["id"] == item_id][0]
+    assert stored["status"] == "todo"
+
+
+def test_add_item_accepts_a_starting_status(project):
+    item_id = repository.add_item(project, "already going", status="doing")["item_id"]
+    stored = [i for i in repository.list_items(project) if i["id"] == item_id][0]
+    assert stored["status"] == "doing"
+
+
+def test_add_item_accepts_a_status_the_project_added(project):
+    repository.add_status(project, "parked", "waiting")
+    assert repository.add_item(project, "on hold", status="parked")["status"] == "added"
+
+
+def test_add_item_rejects_an_unknown_status_and_hands_back_the_valid_set(project):
+    result = repository.add_item(project, "bad", status="nonsense")
+    assert result["status"] == "unknown_status"
+    assert result["valid"] == ["todo", "doing", "blocked", "done"]
+
+
+def test_add_item_files_into_a_folder_of_the_same_project(project):
+    folder_id = repository.create_folder(project, "Bugs")["folder_id"]
+    result = repository.add_item(project, "in a folder", folder_id=folder_id)
+    assert result["status"] == "added"
+
+
+def test_add_item_rejects_a_nonexistent_folder(project):
+    """Unvalidated, this reached Postgres as a raw IntegrityError.
+
+    `trackden add-item <p> "x" --folder 999` was a traceback before this change.
+    """
+    assert repository.add_item(project, "orphan", folder_id=999_999_999) == {
+        "status": "unknown_folder"
+    }
+
+
+def test_add_item_rejects_a_folder_from_another_project(project, temp_slug_b):
+    """The FK proves the row EXISTS, never that it belongs here.
+
+    Unvalidated, the item was filed into another project's folder silently.
+    """
+    repository.create_project(temp_slug_b, name="Other")
+    foreign = repository.create_folder(temp_slug_b, "Their Folder")["folder_id"]
+    assert repository.add_item(project, "mine", folder_id=foreign) == {
+        "status": "unknown_folder"
+    }
+
+
+def test_add_item_reports_an_unknown_project():
+    assert repository.add_item("no-such-project-xyz", "x") == {"status": "unknown_project"}

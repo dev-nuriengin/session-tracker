@@ -20,7 +20,7 @@ def project(temp_slug):
     repository.add_status(temp_slug, "dropped", "closed")
     ids = {}
     for name in ("todo", "doing", "blocked", "parked", "done", "dropped"):
-        item_id = repository.add_item(temp_slug, f"item-{name}")
+        item_id = repository.add_item(temp_slug, f"item-{name}")["item_id"]
         repository.set_status(temp_slug, item_id, name)
         ids[name] = item_id
     return temp_slug, ids
@@ -78,7 +78,7 @@ def test_an_active_item_can_be_the_next_step(project):
 
 def test_all_offerable_items_closed_says_so(temp_slug):
     repository.create_project(temp_slug, name="Tiny")
-    item_id = repository.add_item(temp_slug, "only-item")
+    item_id = repository.add_item(temp_slug, "only-item")["item_id"]
     repository.set_status(temp_slug, item_id, "done")
     assert "all items done" in repository.get_status(temp_slug)
 
@@ -139,7 +139,7 @@ def test_an_unrecognised_stored_status_stays_visible(temp_slug):
     from app.db import SessionLocal
 
     repository.create_project(temp_slug, name="Legacy")
-    item_id = repository.add_item(temp_slug, "legacy-item")
+    item_id = repository.add_item(temp_slug, "legacy-item")["item_id"]
     with SessionLocal() as db:
         item = db.scalar(select(models.Item).where(models.Item.id == item_id))
         item.status = "whatever-this-is"
@@ -159,7 +159,7 @@ def test_an_unrecognised_status_is_offered_as_the_next_step(temp_slug):
     from app.db import SessionLocal
 
     repository.create_project(temp_slug, name="Ruling")
-    item_id = repository.add_item(temp_slug, "legacy-item")
+    item_id = repository.add_item(temp_slug, "legacy-item")["item_id"]
     with SessionLocal() as db:
         item = db.scalar(select(models.Item).where(models.Item.id == item_id))
         item.status = "whatever-this-is"

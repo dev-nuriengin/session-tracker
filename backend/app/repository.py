@@ -285,15 +285,50 @@ def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
         return {"status": "added", "folder_id": folder.id}
 
 
-def add_item(slug: str, title: str, folder_id: int | None = None) -> int | None:
+def add_item(slug: str, title: str, folder_id: int | None = None,
+             status: str | None = None) -> dict:
+    """Create a work item in a project. Returns an outcome, never raises.
+
+    Outcomes: added (with `item_id`) · unknown_folder · unknown_status (with `valid`) ·
+    unknown_project
+
+    NOTE two senses of one word: the `status` PARAMETER is the item's state, while the
+    returned `status` KEY is the outcome of this call. The parameter keeps the domain
+    word and the key keeps the shape eight sibling functions share.
+
+    `folder_id` is validated against THIS project. The ForeignKey alone only proves the
+    row exists, not that it belongs here, so without this check an item could be filed
+    into another project's folder — silently. `status` defaults to the shipped `todo`.
+    """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
-            return None
-        item = models.Item(project_id=project.id, title=title, folder_id=folder_id)
+            return {"status": "unknown_project"}
+
+        if folder_id is not None:
+            folder = db.scalar(
+                select(models.Folder).where(
+                    models.Folder.id == folder_id,
+                    models.Folder.project_id == project.id,
+                )
+            )
+            if folder is None:
+                return {"status": "unknown_folder"}
+
+        if status is None:
+            name = st.TODO
+        else:
+            name = status.strip().lower()
+            vocabulary = _vocabulary(db, project.id)
+            if name not in vocabulary:
+                return {"status": "unknown_status", "valid": list(vocabulary)}
+
+        item = models.Item(
+            project_id=project.id, folder_id=folder_id, title=title, status=name
+        )
         db.add(item)
         db.commit()
-        return item.id
+        return {"status": "added", "item_id": item.id}
 
 
 # ---- the status vocabulary ----
