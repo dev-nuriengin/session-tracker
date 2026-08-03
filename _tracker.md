@@ -20,7 +20,8 @@ plug into it over MCP so they know where everything stands without you re-explai
 |---|---|
 | `trackden onboard` | Bring a project in. Reads a repo, offers to import its checklist behind a y/n/edit gate, scaffolds guidance in `~/.trackden`. Never writes to your repo. |
 | `trackden list` · `show <p>` · `status <p>` | See what you have and what's next. |
-| `trackden add-item <p> "…" [--status]` · `add-folder <p> "…" [--parent]` · `log` · `remember` | Add work (items, folders), save progress, store a link or note. `add-item` / `add-folder` / `add-status` are now available to an agent over MCP too. |
+| `trackden add-item <p> "…" [--status]` · `add-folder <p> "…" [--parent]` · `log [--item]` · `remember [--kind --path --item --folder]` | Add work (items, folders), save progress, store a link/note/transcript/file. `--item` on `log`/`remember` scopes an entry to one item instead of the whole project; `remember --kind file --path <file>` points at a local artifact (Trackden never touches it). `add-item` / `add-folder` / `add-status` are now available to an agent over MCP too. |
+| `trackden show <p> --item <id>` | The whole story of one item: its status, its memory (with file paths), its logs — narrowed to just that item. |
 | `trackden set-status <p> <item> <status>` · `add-status` · `statuses` | Move an item to a new status; add a project-specific status name; list what's valid. |
 | `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
 | `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
@@ -29,28 +30,43 @@ plug into it over MCP so they know where everything stands without you re-explai
 **What agents get over MCP:** `overview` (call first — cheap), `get_history`, `list_items`,
 `set_status`, `list_statuses`, `list_memory`, `get_guidance`, `whats_next`, `search`,
 `save_progress`, `add_memory`, `add_decision`, `list_projects`, `add_item`, `add_folder`,
-`add_status`.
+`add_status`. Tool count stays 16 — Stage B2 added parameters, not tools: `add_memory` gained
+`path`/`item_id`/`folder_id` (a `file` kind, and scoping to the item/folder it belongs to),
+`save_progress` gained `item_id`, and `get_history` gained `item_id` (pass it when resuming
+one item instead of the whole project — its logs, its memory including file paths, its
+status).
 
 **Where things live — one home per fact.** DB owns *state* (projects, items, statuses,
 session logs). Files under `~/.trackden/projects/<slug>/` own *guidance* (way-of-work,
 architecture, decisions). `_tracker.md` in that folder is a **generated mirror** of the DB —
 never hand-edit it. pgvector is a derived index, never a source.
 
-**Three behaviours worth knowing** (they were deliberate decisions, not accidents):
+**Four behaviours worth knowing** (they were deliberate decisions, not accidents):
 
 1. **Declining an import is safe.** Say `n` at the gate, read the file yourself, run
    `onboard` again — it offers the same items again. Import only happens while a project
    has no items, so re-running can never duplicate them.
 2. **Guidance files are never a source of items.** Your repo's `CLAUDE.md` seeds
    `_way-of-work.md` and nothing else, so the same checklist can't land in two places.
-3. **Decisions go to a file, not the DB.** `add_memory` accepts `link | note | transcript`
-   and *rejects* `decision`, pointing you at `add_decision` / `trackden decide`.
+3. **Decisions go to a file, not the DB.** `add_memory` accepts `link | note | transcript |
+   file` and *rejects* `decision`, pointing you at `add_decision` / `trackden decide` — as an
+   outcome dict (`rejected_kind`, with `valid` and a `message`), not an exception; `add_memory`
+   was the last write function that raised for an expected outcome, fixed in Stage B2.
+4. **A session log used to be looked up by `thread_id` alone, with no project filter —
+   fixed in Stage B2.** The CLI's `--thread` defaults to `"cli"` for every project, so
+   `trackden log project-a "…"` then `trackden log project-b "…"` (both on the default
+   thread) filed project B's note into project A's session — a real cross-project bug, not
+   hypothetical. `add_session_log` now looks up the session by `thread_id` AND `project_id`
+   together. Verified by hand at the CLI, not just in pytest: two throwaway projects, both
+   logging on the default `--thread cli`, each `show --full` afterwards showed only its own
+   note.
 
-**What's still open after Stage B1 — know this before you rely on it:** there is no shipped
+**What's still open after Stage B2 — know this before you rely on it:** there is no shipped
 **playbook** yet — an arriving agent has tool descriptions and nothing else, no rule for
-when to save or how to pick a status (Stage B3). And a finding still attaches to the whole
-project, not the item it belongs to — no `file` memory kind, no item-scoped memory/logs,
-no `get_history(item_id=…)` (Stage B2). See "▸ NEXT" below.
+when to save or how to pick a status, and no digest riding inside `overview` (Stage B3). A
+finding now DOES attach to the item it belongs to (the `file` memory kind, item-scoped
+memory/logs, `get_history(item_id=…)` — Stage B2, shipped 2026-08-03) — but nothing yet
+tells an arriving agent to use that. See "▸ NEXT" below.
 
 **Settled:** an item whose stored status is in no vocabulary (a legacy row, or one set by
 hand in `psql`) is offered as NEXT. A queue query offers anything that is not `waiting`
@@ -128,44 +144,65 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT — Stage B2, then B3: item scoping, then teach the agent.**
+**▸ NEXT — Stage B3: teach the agent.**
 
 Stage A unblocked the loop. Stage B1 shipped 2026-08-03: an agent can now create work itself
 — `add_item`, `add_folder`, the MCP `add_status` tool — instead of needing a human at the
-CLI. See Phase 13 below for exactly what shipped.
+CLI. **Stage B2 shipped 2026-08-03 too:** a finding now attaches to the item it belongs to,
+not just the whole project — the `file` memory kind (`memory.path`), `session_logs.item_id`,
+`get_history(item_id=…)`, and the CLI's `--item` / `--path` flags. Verified end-to-end
+against the real database, not just pytest (see Phase 13 below): a file kind saves with the
+path expanded and absolute; `show --item` narrows to one item's logs and memory; a
+`parked` status (behaves as `waiting`) is counted but never offered as NEXT; a missing
+`--path` saves with a warning, no `--path` at all exits 1; and the session-lookup bug (below)
+is fixed. See Phase 13 below for exactly what shipped.
 
-Two things are still missing. **Stage B2** wires memory and logs to the item they belong to:
-the `file` memory kind (`memory.path`), `session_logs.item_id`, `get_history(item_id=…)`,
-and the CLI's `--item` / `--path` flags — until this lands, a finding still attaches to the
-whole project rather than the bug it belongs to. **Stage B3** ships the **playbook**
-(`playbook.py` + `get_playbook()`, with a digest riding inside every `overview` response so
-an agent gets the rules without a second call), `trackden playbook`, and the onboard
-paste-snippet. B3 comes last on purpose: its rules tell an agent to use
-`add_memory(kind="file")` and to attach work to the item it belongs to — both B2 tools —
-so writing those rules before B2 ships would be instructions that lie. See Phase 13 below
-and the Stage B1/B2/B3 rows of the design spec.
+One thing is still missing. **Stage B3** ships the **playbook** (`playbook.py` +
+`get_playbook()`, with a digest riding inside every `overview` response so an agent gets the
+rules without a second call), `trackden playbook`, and the onboard paste-snippet. B3 comes
+last on purpose: its rules tell an agent to use `add_memory(kind="file")` and to attach work
+to the item it belongs to — both B2 deliverables — so writing those rules before B2 shipped
+would have been instructions that lied. Not yet built: no `playbook.py`, no `get_playbook`,
+no digest in `overview`, no onboard paste-snippet, and no `SessionStart` launcher (the only
+mechanical guarantee an agent reads any of this). See Phase 13 below and the Stage
+B1/B2/B3 rows of the design spec.
+
+**Found while building Stage B2 — worth knowing on its own:** a session log used to be
+looked up by `thread_id` alone, with no project filter. The CLI's `--thread` defaults to
+`"cli"` for every project, so `trackden log project-a "…"` then `trackden log project-b
+"…"` (both on the default thread) filed project B's note into project A's session — a real
+cross-project bug anyone using `trackden log` on two projects had already hit, not a
+hypothetical. Fixed: the session is now looked up by `thread_id` AND `project_id` together.
 
 **Then, in order:** launcher/alias so agents call MCP *first* without being told (Phase 11)
 — today continuity depends on you remembering to say "check Trackden" · `trackden delete`
-(no way to remove a project; three findings in the last two branches were made worse by its
-absence — and worth knowing before building it: `Project`'s `cascade="all, delete-orphan"`
-is ORM-level only, there's no DB-level `ON DELETE CASCADE`, so a raw `DELETE FROM projects`
-fails on foreign keys; a delete command must go through the ORM session, not raw SQL) · then
-dogfooding becomes real: onboard this repo into itself, tick items through the tool instead
-of by hand, retire this file.
+(no way to remove a project; worth knowing before building it — two hazards, not one:
+`Project`'s `cascade="all, delete-orphan"` is ORM-level only, there's no DB-level `ON DELETE
+CASCADE`, so a raw `DELETE FROM projects` fails on foreign keys; **and**, confirmed by hand
+while cleaning up this stage's own smoke-test projects, even `db.delete(project)` through
+the ORM fails on a `ForeignKeyViolation` from `memory`/`session_logs` once either holds an
+`item_id` — neither `Memory` nor `SessionLog` has a declared ORM relationship to `Item`
+(only a plain FK column), so the unit of work has no way to know those rows must be deleted
+before the item they point at. The fix already lives in `tests/conftest.py`
+(`_delete_project_cascading`): bulk-delete `SessionLog` and `Memory` rows explicitly first,
+then `db.delete(project)`. A future `trackden delete` needs the same explicit bulk-delete,
+not just `db.delete(project)`) · then dogfooding becomes real: onboard this repo into
+itself, tick items through the tool instead of by hand, retire this file.
 
 ---
 
-**Status:** 53 / 68 — all phases 0–13 have shipped their Stage A and Stage B1
-core. **But "phases done" ≠ "usable day to day":** of the 15 open items, **none are
+**Status:** 61 / 72 — all phases 0–13 have shipped their Stage A, Stage B1 and Stage B2
+core. **But "phases done" ≠ "usable day to day":** of the 11 open items, **none are
 life-support blockers any more** — the one gap that used to stop daily use (`set_status`)
-shipped in Stage A, and an agent can now create work itself, unprompted (Stage B1,
-2026-08-03). Stage B2 (item scoping) and B3 (the playbook) are what remain before an
-arriving agent needs no priming at all. Do not read this line as "finished".
+shipped in Stage A, an agent can now create work itself, unprompted (Stage B1, 2026-08-03),
+and a finding now attaches to the item it belongs to instead of just the whole project
+(Stage B2, 2026-08-03). Stage B3 (the playbook) is what remains before an arriving agent
+needs no priming at all. Do not read this line as "finished".
 
-- 🟡 **Phase 13 Stage B2/B3 — item scoping, then the playbook.** A finding still attaches to
-  the whole project, not the item it belongs to (no `file` memory kind, no
-  `session_logs.item_id`), and no playbook ships yet. See "▸ NEXT" above.
+- 🟡 **Phase 13 Stage B3 — the playbook.** No `playbook.py`, no `get_playbook`, no digest
+  riding inside `overview`, no onboard paste-snippet — an arriving agent still has tool
+  descriptions and nothing else, no rule for when to save or how to pick a status. See
+  "▸ NEXT" above.
 - 🟡 **Phase 11 launcher/alias** — not a blocker, but it is what makes continuity automatic
   instead of dependent on you remembering to mention Trackden.
 - Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
@@ -274,7 +311,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `onboard.py` — read-only repo scan, in priority order: `_tracker.md` · `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `**/_tracker.md` · `CLAUDE.md` · `AGENTS.md` (the last two seed `_way-of-work.md`, never treated as sources of truth)
 - [x] `run_onboard` orchestrator: identify → scan+gate → DB project → scaffold → summary; the review gate (y/n/edit, blank = import) only ever runs while a project is itemless, so re-onboarding can't duplicate items
 - [x] `trackden onboard` CLI: interactive wizard + flags (`--name --kind --client --repo --no-import --yes/-y`)
-- [x] pytest enters the repo for the first time (81 tests then; 275 now, after the guidance, Stage A, and Stage B1 branches added more); DB-marked tests auto-skip when Postgres is unreachable
+- [x] pytest enters the repo for the first time (81 tests then; 328 now, after the guidance, Stage A, Stage B1 and Stage B2 branches added more); DB-marked tests auto-skip when Postgres is unreachable
 - [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
 - [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)
 
@@ -283,7 +320,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `guidance.py` orchestrator: `get(project, doc="way-of-work")` and `add_decision(project, decision, because, rejected=None)` — a `status` vocabulary (`filled` · `template` · `not_scaffolded` · `unknown_project` · `unknown_doc` · `appended` · `invalid_slug`) instead of exceptions crossing the MCP boundary
 - [x] MCP tools `get_guidance` and `add_decision` (`mcp_server.py`)
 - [x] CLI commands `trackden guidance <project> [--doc]` and `trackden decide <project> <decision> --because [--rejected]` (`cli.py`)
-- [x] `repository.MEMORY_KINDS` narrows the `memory` table to `link | note | transcript`; `add_memory` raises `ValueError` outside it — `remember` (CLI) and `add_memory` (MCP) both catch it and exit/return non-success rather than crash
+- [x] `repository.MEMORY_KINDS` narrows the `memory` table to `link | note | transcript`; `add_memory` raises `ValueError` outside it — `remember` (CLI) and `add_memory` (MCP) both catch it and exit/return non-success rather than crash. *(Stage B2, 2026-08-03: widened to `link | note | transcript | file`, and `add_memory` moved off the exception onto an outcome dict — see Stage B2 below.)*
 - [x] One real end-to-end test (`@pytest.mark.db`, `test_guidance.py`) against the actual repository and workspace, no fakes — closes the gap the onboarding branch's migration bug exposed
 - [ ] Deferred: `update_guidance` (editing rules/architecture from an agent) — still a human action on the file
 - [x] **`set_status`, on every door — SHIPPED (Stage A, 2026-08-01, see Phase 13).** An item can move: `repository.set_status` (any valid name to any other, no state machine, always reports `from`/`to`), MCP `set_status`, CLI `set-status`. Status is now a fixed behaviour **class** (`open` · `active` · `waiting` · `closed`) in `statuses.py` with a growable set of **names** in the `item_statuses` table.
@@ -317,11 +354,15 @@ provide, so writing them earlier would ship instructions that lie.
 - [x] MCP tools `add_item`, `add_folder`, `add_status` — thin wrappers (tool count 13 → 16)
 - [x] CLI: `add-folder` gained `--parent`, `add-item` gained `--status` (command count stays 16 — new flags, no new commands)
 
-### Stage B2 — item scoping (open)
-- [ ] The `file` memory kind (`memory.path`) — point at a local artifact (recording, `findings.md`, an HTML output) without Trackden touching the disk
-- [ ] Item-scoped memory and logs (`memory.item_id` wired through, `session_logs.item_id`) — a finding attaches to the item it belongs to
-- [ ] `get_history(item_id=…)` — the read side for item-scoped work
-- [ ] CLI flags `--item` (`remember`, `log`), `--path` (`remember`)
+### Stage B2 — item scoping ✅ (shipped 2026-08-03)
+- [x] `memory.path` and `session_logs.item_id` columns, each with an idempotent (`IF NOT EXISTS`) line in `db.py`'s `_migrate()` — no `create_all` coverage needed since both tables already existed
+- [x] The `file` memory kind (`memory.path`) — `MEMORY_KINDS` widened to `link | note | transcript | file`; a path is expanded and stored absolute (survives a different working directory); a path that doesn't exist is stored WITH `{"warning": "path not found"}` rather than refused; Trackden never creates, moves or reads the file. `add_memory` also moved off raising `ValueError` for a bad kind onto an outcome dict (`rejected_kind`, with `valid` and a `message`) — the last write function using an exception for an expected outcome
+- [x] Item-scoped memory and logs — `memory.item_id`/`folder_id` and `session_logs.item_id` wired through `add_memory`/`add_session_log`, each validated as belonging to THIS project (`unknown_item`/`unknown_folder`), not just existing anywhere
+- [x] **A real cross-project bug, found while wiring this in and fixed here:** `add_session_log` resolved its session by `thread_id` ALONE, no project filter. The CLI's `--thread` defaults to `"cli"` for every project, so `trackden log project-a` then `trackden log project-b` filed B's note into A's session. Now looked up by `thread_id` AND `project_id` together. Reproduced before the fix, then verified live at the CLI post-fix with two throwaway projects (see "Found while building Stage B2" above)
+- [x] `get_history(slug, limit=10, item_id=None)` — with an `item_id`, the payload narrows to that item: its logs, its memory (including file paths), and an `item` block with its title and status. Project-level behaviour (no `item_id`) is unchanged
+- [x] CLI: `remember` gained `--path --item --folder`; `log` gained `--item`; `show` gained `--item` (command count stays 16 — flags only). MCP: `add_memory`, `save_progress`, `get_history` gained parameters (tool count stays 16 — no new tools)
+- [x] Also extracted a `_next_position` helper (a deferred minor from B1) and extended `tests/conftest.py`'s test-teardown cascade helper — no ORM relationship links `Memory`/`SessionLog` to `Item`, so teardown had to bulk-delete those rows explicitly before the item (see the `trackden delete` cascade hazard in "▸ NEXT" above, confirmed again by hand while cleaning up this task's own smoke-test projects)
+- [x] Verified end-to-end against the real database (not just pytest): `remember --kind file --path <file> --item <id>` saves with the path absolute; `show --item <id>` shows only that item's logs/memory; a `parked` status (behaves as `waiting`) is counted by `status` but never offered as NEXT; a missing `--path` file saves with a warning; `--kind file` with no `--path` exits 1; the cross-project fix holds at the CLI
 
 ### Stage B3 — the playbook (open, comes last on purpose)
 - [ ] `playbook.py` — Trackden's own shipped, read-only rules: full text, a digest, a version — served by `get_playbook()`

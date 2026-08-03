@@ -96,20 +96,24 @@ restart so it loads). Your agent now has these tools:
 |---|---|
 | `list_projects` | cheap overview of everything you track |
 | `overview` | call this FIRST for a project — compact summary, not a full dump |
-| `get_history` | pull a project's history **first when resuming** — never start blind |
+| `get_history` | pull a project's history **first when resuming** — never start blind. Pass `item_id` to narrow the whole payload (open items, memory, logs) to one item instead of the project |
 | `list_items` | drill-down: a project's items (open only unless asked for done too) |
 | `set_status` | move an item to a new status — `doing`, `waiting`, `done`, or a project's own |
 | `list_statuses` | the status names this project accepts, each with the class it behaves as |
-| `list_memory` | drill-down: a project's durable memory (links, notes, transcripts) |
+| `list_memory` | drill-down: a project's durable memory (links, notes, transcripts, files) |
 | `get_guidance` | read the project's rules / architecture / decisions — one doc per call |
 | `whats_next` | suggested next steps |
-| `save_progress` | capture what was done, behind the scenes |
-| `add_memory` | store a repo link, note, or meeting transcript |
+| `save_progress` | capture what was done, behind the scenes. Pass `item_id` to attach the entry to one item instead of the whole project |
+| `add_memory` | store a repo link, note, meeting transcript, or a pointer to a local file (`kind="file"` + `path` — Trackden never touches the file itself). Pass `item_id`/`folder_id` to attach it to one item or folder instead of the whole project |
 | `add_decision` | record a decision **and why**, into the project's decisions log |
 | `search` | semantic search across all session logs |
 | `add_item` | create a new item — an agent can put work into the tracker itself |
 | `add_folder` | create a new (optionally nested) folder |
 | `add_status` | add a project-specific status name, with the behaviour class it follows |
+
+Tool count stays at 16 — the new parameters above (`item_id`, `folder_id`, `path` on
+`add_memory`; `item_id` on `save_progress` and `get_history`) extend existing tools rather
+than adding new ones.
 
 > 💡 Try it: ask your agent *"what's the history of my-first-project?"* — it calls
 > `get_history` and answers from the tracker, not from guesswork.
