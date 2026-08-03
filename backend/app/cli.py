@@ -110,13 +110,22 @@ def add_project(
 
 
 @app.command("add-folder")
-def add_folder(project: str, name: str):
-    """Add a folder to a project."""
-    fid = repository.create_folder(project, name)
-    if not fid:
-        typer.echo(f"unknown project '{project}'")
-        raise typer.Exit(1)
-    typer.echo(f"✓ folder #{fid} added to {project}")
+def add_folder(
+    project: str,
+    name: str,
+    parent: int = typer.Option(None, help="Parent folder id (nest inside it)"),
+):
+    """Add a folder to a project, optionally nested inside another folder."""
+    result = repository.create_folder(project, name, parent_id=parent)
+    if result["status"] == "added":
+        typer.echo(f"✓ folder #{result['folder_id']} added to {project}")
+        return
+    messages = {
+        "unknown_parent": f"unknown parent folder #{parent} in '{project}'",
+        "unknown_project": f"unknown project '{project}'",
+    }
+    typer.echo(messages[result["status"]])
+    raise typer.Exit(1)
 
 
 @app.command("add-item")

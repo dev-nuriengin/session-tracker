@@ -84,3 +84,43 @@ def test_the_session_is_usable_after_a_lost_race(project, monkeypatch):
     assert repository.add_status(project, "postponed", "waiting") == {"status": "added"}
     names = [row["name"] for row in repository.list_statuses(project)]
     assert "postponed" in names
+
+
+# ---- create_folder ----
+
+def test_create_folder_returns_the_new_id(project):
+    result = repository.create_folder(project, "Bugs")
+    assert result["status"] == "added"
+    assert isinstance(result["folder_id"], int)
+
+
+def test_create_folder_nests_under_a_parent_in_the_same_project(project):
+    parent = repository.create_folder(project, "Bugs")["folder_id"]
+    child = repository.create_folder(project, "Login", parent_id=parent)
+    assert child["status"] == "added"
+
+
+def test_create_folder_rejects_a_nonexistent_parent(project):
+    """Unvalidated, this reached Postgres as a raw IntegrityError."""
+    assert repository.create_folder(project, "Orphan", parent_id=999_999_999) == {
+        "status": "unknown_parent"
+    }
+
+
+def test_create_folder_rejects_a_parent_from_another_project(project, temp_slug_b):
+    """The FK proves the row EXISTS, never that it belongs here.
+
+    Unvalidated, this silently nested a folder inside another project's tree —
+    worse than a crash, because no error would ever reveal it.
+    """
+    repository.create_project(temp_slug_b, name="Other")
+    foreign = repository.create_folder(temp_slug_b, "Their Folder")["folder_id"]
+    assert repository.create_folder(project, "Mine", parent_id=foreign) == {
+        "status": "unknown_parent"
+    }
+
+
+def test_create_folder_reports_an_unknown_project():
+    assert repository.create_folder("no-such-project-xyz", "Bugs") == {
+        "status": "unknown_project"
+    }

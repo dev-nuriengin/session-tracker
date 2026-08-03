@@ -257,15 +257,32 @@ def items_with_folders(slug: str) -> list[TrackerItem]:
 
 # ---- folders & items ----
 
-def create_folder(slug: str, name: str, parent_id: int | None = None) -> int | None:
+def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
+    """Create a folder in a project. Returns an outcome, never raises.
+
+    Outcomes: added (with `folder_id`) · unknown_parent · unknown_project
+
+    `parent_id` is validated against THIS project. The ForeignKey alone only proves
+    the row exists, not that it belongs here, so without this check a caller could
+    nest a folder inside another project's tree — silently, with no error to reveal it.
+    """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
-            return None
+            return {"status": "unknown_project"}
+        if parent_id is not None:
+            parent = db.scalar(
+                select(models.Folder).where(
+                    models.Folder.id == parent_id,
+                    models.Folder.project_id == project.id,
+                )
+            )
+            if parent is None:
+                return {"status": "unknown_parent"}
         folder = models.Folder(project_id=project.id, name=name, parent_id=parent_id)
         db.add(folder)
         db.commit()
-        return folder.id
+        return {"status": "added", "folder_id": folder.id}
 
 
 def add_item(slug: str, title: str, folder_id: int | None = None) -> int | None:

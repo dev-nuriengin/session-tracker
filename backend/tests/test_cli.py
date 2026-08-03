@@ -143,8 +143,30 @@ def test_statuses_exits_non_zero_for_an_unknown_project(monkeypatch):
 
 def test_add_folder_exits_non_zero_for_an_unknown_project(monkeypatch):
     _no_schema(monkeypatch)
-    monkeypatch.setattr(cli_mod.repository, "create_folder", lambda *a, **k: None)
+    monkeypatch.setattr(
+        cli_mod.repository, "create_folder", lambda *a, **k: {"status": "unknown_project"}
+    )
     assert runner.invoke(cli_mod.app, ["add-folder", "nope", "Bugs"]).exit_code == 1
+
+
+def test_add_folder_reports_the_new_id(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "create_folder", lambda *a, **k: {"status": "added", "folder_id": 7}
+    )
+    result = runner.invoke(cli_mod.app, ["add-folder", "acme", "Bugs"])
+    assert result.exit_code == 0, result.output
+    assert "#7" in result.output
+
+
+def test_add_folder_exits_non_zero_for_an_unknown_parent(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "create_folder", lambda *a, **k: {"status": "unknown_parent"}
+    )
+    result = runner.invoke(cli_mod.app, ["add-folder", "acme", "Bugs", "--parent", "999"])
+    assert result.exit_code == 1
+    assert "999" in result.output
 
 
 def test_add_item_exits_non_zero_for_an_unknown_project(monkeypatch):

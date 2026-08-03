@@ -94,7 +94,7 @@ def test_import_items_reuses_a_folder_created_out_of_band(temp_slug):
     import runs; a later import referencing that same name must reuse it, not create
     a second `Folder` row with the same name."""
     repository.create_project(temp_slug)
-    existing_id = repository.create_folder(temp_slug, "Phase 0")
+    existing_id = repository.create_folder(temp_slug, "Phase 0")["folder_id"]
 
     count = repository.import_items(
         temp_slug, [{"title": "new item", "status": "todo", "folder": "Phase 0"}]
