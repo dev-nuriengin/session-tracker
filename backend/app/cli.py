@@ -284,13 +284,20 @@ def log(
     note: str,
     thread: str = typer.Option("cli", help="Session/thread id"),
     kind: str = typer.Option("step", help="step | note | summary | plan"),
+    item: int = typer.Option(None, help="Attach to this item id"),
 ):
     """Save session progress (a step/note) for a project."""
-    ok = repository.add_session_log(project, thread, note, kind)
-    if not ok:
-        typer.echo(f"unknown project '{project}'")
-        raise typer.Exit(1)
-    typer.echo("✓ logged")
+    result = repository.add_session_log(project, thread, note, kind, item_id=item)
+    outcome = result["status"]
+    if outcome == "saved":
+        typer.echo("✓ logged")
+        return
+    messages = {
+        "unknown_item": f"unknown item #{item} in '{project}'",
+        "unknown_project": f"unknown project '{project}'",
+    }
+    typer.echo(messages[outcome])
+    raise typer.Exit(1)
 
 
 _GATE_PREVIEW = 10  # show at most this many items before asking

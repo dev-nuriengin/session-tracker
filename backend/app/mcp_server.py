@@ -174,10 +174,16 @@ def whats_next(project: str) -> str:
 
 
 @mcp.tool()
-def save_progress(project: str, thread_id: str, note: str, kind: str = "step") -> bool:
+def save_progress(
+    project: str, thread_id: str, note: str, kind: str = "step", item_id: int | None = None
+) -> dict:
     """Save what you just did into the tracker (progress capture).
-    kind: step | note | summary | plan. thread_id names this work session."""
-    return repository.add_session_log(project, thread_id, note, kind)
+    kind: step | note | summary | plan. thread_id names this work session.
+    Pass `item_id` when the progress is about one specific item, so it doesn't sit
+    in a pile with every other item's progress. `item_id` is validated against
+    this project. Returns the outcome unchanged: status is one of
+    saved · unknown_item · unknown_project."""
+    return repository.add_session_log(project, thread_id, note, kind, item_id=item_id)
 
 
 @mcp.tool()

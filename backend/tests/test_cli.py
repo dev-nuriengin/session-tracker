@@ -211,8 +211,30 @@ def test_add_item_exits_non_zero_for_an_unknown_status(monkeypatch):
 
 def test_log_exits_non_zero_for_an_unknown_project(monkeypatch):
     _no_schema(monkeypatch)
-    monkeypatch.setattr(cli_mod.repository, "add_session_log", lambda *a, **k: False)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_session_log", lambda *a, **k: {"status": "unknown_project"}
+    )
     assert runner.invoke(cli_mod.app, ["log", "nope", "did a thing"]).exit_code == 1
+
+
+def test_log_exits_non_zero_for_an_unknown_item(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_session_log", lambda *a, **k: {"status": "unknown_item"}
+    )
+    result = runner.invoke(cli_mod.app, ["log", "acme", "did a thing", "--item", "999"])
+    assert result.exit_code == 1
+    assert "999" in result.output
+
+
+def test_log_prints_confirmation_on_success(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_session_log", lambda *a, **k: {"status": "saved"}
+    )
+    result = runner.invoke(cli_mod.app, ["log", "acme", "did a thing"])
+    assert result.exit_code == 0, result.output
+    assert "✓" in result.output
 
 
 def test_remember_reports_saved_with_the_warning_line(monkeypatch):

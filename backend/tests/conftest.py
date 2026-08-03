@@ -82,11 +82,22 @@ def _delete_project_cascading(db, project) -> None:
     before the memory row pointing at it, raising a FK violation. Harmless before Task 2
     (item_id/folder_id were always NULL); real now that add_memory populates them.
     Bulk-deleting memory first sidesteps the ordering question entirely.
+
+    Same problem, one hop further, for `SessionLog.item_id`: SessionLog has an ORM
+    relationship to Session (which cascades from Project just fine) but none to Item,
+    so the unit of work still doesn't know a session_logs row pointing at an item must
+    go before that item. Bulk-delete those too — reached via their Session, since
+    SessionLog has no project_id of its own.
     """
-    from sqlalchemy import delete
+    from sqlalchemy import delete, select
 
     from app import models
 
+    session_ids = db.scalars(
+        select(models.Session.id).where(models.Session.project_id == project.id)
+    ).all()
+    if session_ids:
+        db.execute(delete(models.SessionLog).where(models.SessionLog.session_id.in_(session_ids)))
     db.execute(delete(models.Memory).where(models.Memory.project_id == project.id))
     db.delete(project)  # cascades to folders / items / sessions
     db.commit()

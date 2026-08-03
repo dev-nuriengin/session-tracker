@@ -109,6 +109,27 @@ def test_add_memory_delegates_path_and_item_id(monkeypatch):
     assert result == {"status": "saved"}
 
 
+def test_save_progress_is_registered_as_an_mcp_tool():
+    assert mcp_server.mcp._tool_manager.get_tool("save_progress") is not None
+
+
+def test_save_progress_delegates_thread_id_and_item_id(monkeypatch):
+    seen = {}
+
+    def fake_add_session_log(project, thread_id, note, kind, item_id=None):
+        seen.update(
+            project=project, thread_id=thread_id, note=note, kind=kind, item_id=item_id
+        )
+        return {"status": "saved"}
+
+    monkeypatch.setattr(mcp_server.repository, "add_session_log", fake_add_session_log)
+    result = mcp_server.save_progress("korpus", "t1", "fixed the redirect", item_id=42)
+
+    assert seen["thread_id"] == "t1"
+    assert seen["item_id"] == 42
+    assert result == {"status": "saved"}
+
+
 def test_set_status_is_registered_as_a_tool():
     assert mcp_server.mcp._tool_manager.get_tool("set_status") is not None
 

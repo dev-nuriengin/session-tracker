@@ -600,23 +600,50 @@ def list_memory(slug: str) -> list[dict]:
 
 # ---- sessions & continuity ----
 
-def add_session_log(slug: str, thread_id: str, content: str, kind: str = "note") -> bool:
-    """Save a session log entry for a project (creating the session on first use).
-    Returns False if the project is unknown."""
+def add_session_log(slug: str, thread_id: str, content: str, kind: str = "note",
+                    item_id: int | None = None) -> dict:
+    """Save a session log entry, creating the session on first use. Never raises.
+
+    Outcomes: saved · unknown_item · unknown_project
+
+    The session is looked up by thread_id AND project. It used to be thread_id alone,
+    which meant two projects using the same thread id — and the CLI defaults every
+    project to "cli" — shared one session, so a log filed into whichever project got
+    there first and never appeared in the other's history.
+
+    `item_id` scopes the entry to one item and is validated against THIS project.
+    """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
-            return False
-        session = db.scalar(select(models.Session).where(models.Session.thread_id == thread_id))
+            return {"status": "unknown_project"}
+
+        if item_id is not None:
+            owned = db.scalar(
+                select(models.Item).where(
+                    models.Item.id == item_id, models.Item.project_id == project.id
+                )
+            )
+            if owned is None:
+                return {"status": "unknown_item"}
+
+        session = db.scalar(
+            select(models.Session).where(
+                models.Session.thread_id == thread_id,
+                models.Session.project_id == project.id,
+            )
+        )
         if session is None:
             session = models.Session(project_id=project.id, thread_id=thread_id)
             db.add(session)
             db.flush()
+
         db.add(models.SessionLog(
-            session_id=session.id, content=content, kind=kind, embedding=embed(content)
+            session_id=session.id, item_id=item_id, content=content,
+            kind=kind, embedding=embed(content),
         ))
         db.commit()
-        return True
+        return {"status": "saved"}
 
 
 def search_logs(query: str, limit: int = 5) -> list[dict]:
