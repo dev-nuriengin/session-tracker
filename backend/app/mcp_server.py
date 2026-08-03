@@ -157,8 +157,6 @@ def get_history(project: str, limit: int = 10, item_id: int | None = None) -> di
     entries. `item_id` is validated against this project: an item from another
     project returns `{"status": "unknown_item"}`. An unknown project still returns
     `{}`, unchanged."""
-    if item_id is None:
-        return repository.get_history(project, limit=limit)
     return repository.get_history(project, limit=limit, item_id=item_id)
 
 
