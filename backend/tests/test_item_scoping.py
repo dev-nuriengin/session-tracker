@@ -38,6 +38,28 @@ def test_an_unknown_project_is_reported(project):
     }
 
 
+def test_two_logs_on_one_thread_reuse_one_session(project):
+    """The behaviour the original lookup existed for. A regression here is invisible
+    in get_history — it just silently multiplies `sessions` rows."""
+    from sqlalchemy import func, select
+
+    from app import models
+    from app.db import SessionLocal
+
+    repository.add_session_log(project, "same-thread", "first")
+    repository.add_session_log(project, "same-thread", "second")
+
+    with SessionLocal() as db:
+        proj = db.scalar(select(models.Project).where(models.Project.slug == project))
+        count = db.scalar(
+            select(func.count()).select_from(models.Session).where(
+                models.Session.project_id == proj.id,
+                models.Session.thread_id == "same-thread",
+            )
+        )
+    assert count == 1
+
+
 def test_two_projects_sharing_a_thread_id_keep_separate_logs(project, temp_slug_b):
     """THE BUG: the session lookup filtered on thread_id alone, ignoring the project.
 
@@ -122,3 +144,21 @@ def test_a_closed_item_still_returns_its_history(bug):
     payload = repository.get_history(slug, item_id=bug_id)
     assert payload["item"]["status"] == "done"
     assert len(payload["recent_logs"]) == 2
+
+
+# ---- search_logs(...) carries item_id, so a hit can be followed into get_history ----
+
+def test_a_search_hit_on_an_item_scoped_log_carries_its_item_id(bug):
+    slug, bug_id, _ = bug
+    hits = repository.search_logs("cookie SameSite is the cause", limit=20)
+    hit = next(
+        h for h in hits if h["project"] == slug and h["content"] == "cookie SameSite is the cause"
+    )
+    assert hit["item_id"] == bug_id
+
+
+def test_a_search_hit_on_a_project_level_log_has_no_item_id(bug):
+    slug, _, _ = bug
+    hits = repository.search_logs("project-level note", limit=20)
+    hit = next(h for h in hits if h["project"] == slug and h["content"] == "project-level note")
+    assert hit["item_id"] is None

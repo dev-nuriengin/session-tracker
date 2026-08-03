@@ -262,6 +262,19 @@ def test_remember_kind_file_without_a_path_exits_non_zero(monkeypatch):
     assert "--path" in result.output
 
 
+def test_remember_with_an_invalid_path_exits_non_zero(monkeypatch):
+    """Without an `invalid_path` key, this outcome raised a KeyError in `remember`."""
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_memory", lambda *a, **k: {"status": "invalid_path"}
+    )
+    result = runner.invoke(
+        cli_mod.app, ["remember", "acme", "x", "--kind", "file", "--path", "x"]
+    )
+    assert result.exit_code == 1
+    assert str(cli_mod.repository.MAX_PATH) in result.output
+
+
 def test_remember_with_an_unknown_item_exits_non_zero(monkeypatch):
     _no_schema(monkeypatch)
     monkeypatch.setattr(

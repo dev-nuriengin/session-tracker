@@ -119,3 +119,18 @@ def test_project_level_memory_still_works(project):
     """Most memory is not about one item; omitting item_id must stay valid."""
     assert repository.add_memory(project, "a project note")["status"] == "saved"
     assert repository.list_memory(project)[0]["item_id"] is None
+
+
+# ---- path length guard ----
+
+def test_a_path_longer_than_the_column_is_refused(project):
+    """Unguarded, this reached Postgres as a raw DataError — over MCP, a traceback."""
+    long_path = "/" + "x" * (repository.MAX_PATH + 10)
+    assert repository.add_memory(project, "deep", kind="file", path=long_path) == {
+        "status": "invalid_path"
+    }
+
+
+def test_a_path_at_the_length_limit_is_accepted(project):
+    at_limit = "/" + "x" * (repository.MAX_PATH - 1)
+    assert repository.add_memory(project, "edge", kind="file", path=at_limit)["status"] == "saved"

@@ -119,6 +119,8 @@ def show(
         line = f"  • [{m['kind']}] {m['content']}"
         if m.get("url"):
             line += f"  ({m['url']})"
+        if m.get("path"):
+            line += f"  ({m['path']})"
         typer.echo(line)
     if not h["memory"]:
         typer.echo("  (none)")
@@ -275,6 +277,10 @@ def remember(
         raise typer.Exit(1)
     messages = {
         "missing_path": "--path is required for --kind file",
+        "invalid_path": (
+            f"path is too long once resolved to an absolute path — must be at most "
+            f"{repository.MAX_PATH} characters"
+        ),
         "unknown_item": f"unknown item #{item} in '{project}'",
         "unknown_folder": f"unknown folder #{folder} in '{project}'",
         "unknown_project": f"unknown project '{project}'",

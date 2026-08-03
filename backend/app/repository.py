@@ -270,6 +270,18 @@ def _next_position(db, model, project_id: int) -> int:
     return 0 if highest is None else highest + 1
 
 
+def _owned(db, model, id_: int, project_id: int):
+    """The row with this id IF it belongs to this project, else None.
+
+    A ForeignKey proves a row exists; it never proves the row belongs here. Every
+    caller-supplied id goes through this, so a caller cannot reach into another
+    project's items or folders — the rule the whole write layer is built on.
+    """
+    return db.scalar(
+        select(model).where(model.id == id_, model.project_id == project_id)
+    )
+
+
 def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
     """Create a folder in a project. Returns an outcome, never raises.
 
@@ -295,13 +307,7 @@ def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
         if project is None:
             return {"status": "unknown_project"}
         if parent_id is not None:
-            parent = db.scalar(
-                select(models.Folder).where(
-                    models.Folder.id == parent_id,
-                    models.Folder.project_id == project.id,
-                )
-            )
-            if parent is None:
+            if _owned(db, models.Folder, parent_id, project.id) is None:
                 return {"status": "unknown_parent"}
         position = _next_position(db, models.Folder, project.id)
         folder = models.Folder(project_id=project.id, name=name, parent_id=parent_id, position=position)
@@ -331,13 +337,7 @@ def add_item(slug: str, title: str, folder_id: int | None = None,
             return {"status": "unknown_project"}
 
         if folder_id is not None:
-            folder = db.scalar(
-                select(models.Folder).where(
-                    models.Folder.id == folder_id,
-                    models.Folder.project_id == project.id,
-                )
-            )
-            if folder is None:
+            if _owned(db, models.Folder, folder_id, project.id) is None:
                 return {"status": "unknown_folder"}
 
         if status is None:
@@ -374,6 +374,12 @@ MAX_STATUS_NAME = 20
 # this must be rejected as `invalid_name` here, before it ever reaches Postgres
 # as a DataError — same defect class as MAX_STATUS_NAME above, same fix.
 MAX_FOLDER_NAME = 200
+
+# Must match models.Memory.path's column width (models.py): a resolved path longer
+# than this must be rejected as `invalid_path` here, before it ever reaches Postgres
+# as a DataError — same defect class as MAX_STATUS_NAME and MAX_FOLDER_NAME above,
+# same fix.
+MAX_PATH = 500
 
 
 def _vocabulary(db, project_id: int) -> dict[str, str]:
@@ -512,8 +518,9 @@ def add_memory(slug: str, content: str, kind: str = "note", title: str | None = 
                item_id: int | None = None, folder_id: int | None = None) -> dict:
     """Save a durable fact to a project's memory. Returns an outcome, never raises.
 
-    Outcomes: saved (optionally with `warning`) · missing_path · rejected_kind (with
-    `valid` and a `message`) · unknown_item · unknown_folder · unknown_project
+    Outcomes: saved (optionally with `warning`) · invalid_path · missing_path ·
+    rejected_kind (with `valid` and a `message`) · unknown_item · unknown_folder ·
+    unknown_project
 
     `item_id` scopes the fact to one item, so a bug's findings stop sitting in a pile
     with every other bug's. It is validated against THIS project: a ForeignKey proves
@@ -522,7 +529,10 @@ def add_memory(slug: str, content: str, kind: str = "note", title: str | None = 
     `kind="file"` requires `path` and stores it expanded and absolute, so the pointer
     survives a different working directory. A path that does not exist is stored WITH
     a warning rather than refused — the user may be recording where something is about
-    to go. Trackden never creates, moves or reads the file.
+    to go. Trackden never creates, moves or reads the file. A resolved path longer
+    than the column allows (MAX_PATH) is rejected as `invalid_path`, checked before
+    the session opens — same defect class MAX_STATUS_NAME/MAX_FOLDER_NAME guard
+    against elsewhere.
     """
     if kind not in MEMORY_KINDS:
         hint = (
@@ -545,7 +555,18 @@ def add_memory(slug: str, content: str, kind: str = "note", title: str | None = 
     if path:
         candidate = Path(path).expanduser()
         resolved = str(candidate.resolve())
-        if not candidate.exists():
+        if len(resolved) > MAX_PATH:
+            return {"status": "invalid_path"}
+        try:
+            # Path.exists() only swallows ENOENT/ENOTDIR/EBADF/ELOOP itself; a path
+            # with an over-length component (ENAMETOOLONG) or one this process
+            # cannot traverse (EACCES) still raises straight through it. Both are
+            # "can't confirm it exists", not a reason for add_memory to raise past
+            # the MCP boundary — treat either the same as "not found".
+            found = candidate.exists()
+        except OSError:
+            found = False
+        if not found:
             warning = "path not found"
 
     with SessionLocal() as db:
@@ -554,21 +575,11 @@ def add_memory(slug: str, content: str, kind: str = "note", title: str | None = 
             return {"status": "unknown_project"}
 
         if item_id is not None:
-            owned = db.scalar(
-                select(models.Item).where(
-                    models.Item.id == item_id, models.Item.project_id == project.id
-                )
-            )
-            if owned is None:
+            if _owned(db, models.Item, item_id, project.id) is None:
                 return {"status": "unknown_item"}
 
         if folder_id is not None:
-            owned = db.scalar(
-                select(models.Folder).where(
-                    models.Folder.id == folder_id, models.Folder.project_id == project.id
-                )
-            )
-            if owned is None:
+            if _owned(db, models.Folder, folder_id, project.id) is None:
                 return {"status": "unknown_folder"}
 
         db.add(models.Memory(
@@ -577,6 +588,19 @@ def add_memory(slug: str, content: str, kind: str = "note", title: str | None = 
         ))
         db.commit()
         return {"status": "saved", "warning": warning} if warning else {"status": "saved"}
+
+
+def _memory_row(m: models.Memory) -> dict:
+    """One memory row, shaped the way every caller gets it.
+
+    `list_memory` and `get_history`'s item-scoped branch both hand-built this same
+    dict; extracted so the next key (as `path`/`item_id` were) is added once, not
+    twice.
+    """
+    return {
+        "kind": m.kind, "title": m.title, "content": m.content, "url": m.url,
+        "path": m.path, "item_id": m.item_id,
+    }
 
 
 def list_memory(slug: str) -> list[dict]:
@@ -589,13 +613,7 @@ def list_memory(slug: str) -> list[dict]:
             .where(models.Memory.project_id == project.id)
             .order_by(models.Memory.created_at.desc())
         ).all()
-        return [
-            {
-                "kind": m.kind, "title": m.title, "content": m.content, "url": m.url,
-                "path": m.path, "item_id": m.item_id,
-            }
-            for m in rows
-        ]
+        return [_memory_row(m) for m in rows]
 
 
 # ---- sessions & continuity ----
@@ -619,12 +637,7 @@ def add_session_log(slug: str, thread_id: str, content: str, kind: str = "note",
             return {"status": "unknown_project"}
 
         if item_id is not None:
-            owned = db.scalar(
-                select(models.Item).where(
-                    models.Item.id == item_id, models.Item.project_id == project.id
-                )
-            )
-            if owned is None:
+            if _owned(db, models.Item, item_id, project.id) is None:
                 return {"status": "unknown_item"}
 
         session = db.scalar(
@@ -648,7 +661,9 @@ def add_session_log(slug: str, thread_id: str, content: str, kind: str = "note",
 
 def search_logs(query: str, limit: int = 5) -> list[dict]:
     """Semantic search across ALL projects' session logs (local embeddings + pgvector).
-    Returns the closest log entries with their project + a similarity score."""
+    Returns the closest log entries with their project + a similarity score.
+    Each hit carries `item_id` (None for a project-level log) so a hit can be
+    followed into `get_history(item_id=...)` for that item's whole story."""
     qv = embed(query)
     with SessionLocal() as db:
         rows = db.execute(
@@ -664,7 +679,10 @@ def search_logs(query: str, limit: int = 5) -> list[dict]:
             .limit(limit)
         ).all()
         return [
-            {"project": slug, "kind": log.kind, "content": log.content, "score": round(1 - dist, 3)}
+            {
+                "project": slug, "kind": log.kind, "content": log.content,
+                "score": round(1 - dist, 3), "item_id": log.item_id,
+            }
             for log, slug, dist in rows
         ]
 
@@ -695,11 +713,7 @@ def get_history(slug: str, limit: int = 10, item_id: int | None = None) -> dict:
 
         item = None
         if item_id is not None:
-            item = db.scalar(
-                select(models.Item).where(
-                    models.Item.id == item_id, models.Item.project_id == project.id
-                )
-            )
+            item = _owned(db, models.Item, item_id, project.id)
             if item is None:
                 return {"status": "unknown_item"}
 
@@ -712,13 +726,7 @@ def get_history(slug: str, limit: int = 10, item_id: int | None = None) -> dict:
                 .where(models.Memory.project_id == project.id, models.Memory.item_id == item_id)
                 .order_by(models.Memory.created_at.desc())
             ).all()
-            memory = [
-                {
-                    "kind": m.kind, "title": m.title, "content": m.content, "url": m.url,
-                    "path": m.path, "item_id": m.item_id,
-                }
-                for m in memory_rows
-            ]
+            memory = [_memory_row(m) for m in memory_rows]
         else:
             open_items_rows = db.scalars(
                 select(models.Item)

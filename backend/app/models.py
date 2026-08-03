@@ -175,7 +175,7 @@ class Memory(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
     folder_id: Mapped[int | None] = mapped_column(ForeignKey("folders.id"), nullable=True)
     item_id: Mapped[int | None] = mapped_column(ForeignKey("tracking_items.id"), nullable=True)
-    kind: Mapped[str] = mapped_column(String(20), default="note")  # link | note | transcript
+    kind: Mapped[str] = mapped_column(String(20), default="note")  # link | note | transcript | file
     title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     content: Mapped[str] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # e.g. GitLab/GitHub link

@@ -216,9 +216,9 @@ def add_memory(
     NOT for decisions: those go to add_decision, which writes them to the project's
     decisions guidance file so each fact has exactly one home.
 
-    Returns the outcome unchanged: status is one of saved · missing_path ·
-    rejected_kind (with `valid` and `message`) · unknown_item · unknown_folder ·
-    unknown_project."""
+    Returns the outcome unchanged: status is one of saved · invalid_path ·
+    missing_path · rejected_kind (with `valid` and `message`) · unknown_item ·
+    unknown_folder · unknown_project."""
     return repository.add_memory(
         project, content, kind=kind, title=title, url=url,
         path=path, item_id=item_id, folder_id=folder_id,
