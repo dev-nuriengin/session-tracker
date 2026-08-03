@@ -302,3 +302,43 @@ def test_show_reports_the_waiting_count(monkeypatch):
     result = runner.invoke(cli_mod.app, ["show", "acme"])
     assert result.exit_code == 0, result.output
     assert "waiting" in result.output and "2" in result.output
+
+
+def test_show_item_prints_the_item_block_memory_and_logs(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository,
+        "get_history",
+        lambda *a, **k: {
+            "project": "acme",
+            "open_items": ["BUG-431 login redirect loops"],
+            "item": {"title": "BUG-431 login redirect loops", "status": "todo"},
+            "memory": [{"kind": "file", "content": "First findings",
+                        "path": "/tmp/trackden-b2-findings.md", "url": None, "item_id": 42}],
+            "recent_logs": [{"kind": "note", "content": "reproduced on Safari"}],
+        },
+    )
+    result = runner.invoke(cli_mod.app, ["show", "acme", "--item", "42"])
+    assert result.exit_code == 0, result.output
+    assert "BUG-431 login redirect loops" in result.output
+    assert "todo" in result.output
+    assert "trackden-b2-findings.md" in result.output
+    assert "reproduced on Safari" in result.output
+
+
+def test_show_item_exits_non_zero_for_an_unknown_project(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(cli_mod.repository, "get_history", lambda *a, **k: {})
+    result = runner.invoke(cli_mod.app, ["show", "nope", "--item", "42"])
+    assert result.exit_code == 1
+    assert "nope" in result.output
+
+
+def test_show_item_exits_non_zero_for_an_unknown_item(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "get_history", lambda *a, **k: {"status": "unknown_item"}
+    )
+    result = runner.invoke(cli_mod.app, ["show", "acme", "--item", "999"])
+    assert result.exit_code == 1
+    assert "999" in result.output

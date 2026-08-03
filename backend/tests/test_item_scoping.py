@@ -57,3 +57,68 @@ def test_two_projects_sharing_a_thread_id_keep_separate_logs(project, temp_slug_
     assert "note about B" not in a_logs
     assert "note about B" in b_logs
     assert "note about A" not in b_logs
+
+
+# ---- get_history(item_id=...) ----
+
+@pytest.fixture
+def bug(project):
+    """One bug with its own findings, beside an unrelated item with its own."""
+    bug_id = repository.add_item(project, "BUG-431 login redirect loops")["item_id"]
+    other_id = repository.add_item(project, "unrelated chore")["item_id"]
+
+    repository.add_session_log(project, "t1", "reproduced on Safari", item_id=bug_id)
+    repository.add_session_log(project, "t1", "cookie SameSite is the cause", item_id=bug_id)
+    repository.add_session_log(project, "t1", "swept the logs", item_id=other_id)
+    repository.add_session_log(project, "t1", "project-level note")
+
+    repository.add_memory(project, "First findings", kind="file",
+                          path="/tmp/trackden-b2-findings.md", item_id=bug_id)
+    repository.add_memory(project, "unrelated link", kind="link", item_id=other_id)
+    return project, bug_id, other_id
+
+
+def test_item_history_holds_only_that_items_logs(bug):
+    slug, bug_id, _ = bug
+    contents = [e["content"] for e in repository.get_history(slug, item_id=bug_id)["recent_logs"]]
+    assert "reproduced on Safari" in contents
+    assert "cookie SameSite is the cause" in contents
+    assert "swept the logs" not in contents
+    assert "project-level note" not in contents
+
+
+def test_item_history_holds_only_that_items_memory(bug):
+    slug, bug_id, _ = bug
+    memory = repository.get_history(slug, item_id=bug_id)["memory"]
+    assert [m["content"] for m in memory] == ["First findings"]
+    assert memory[0]["path"].endswith("trackden-b2-findings.md")
+
+
+def test_item_history_names_the_item_it_is_about(bug):
+    slug, bug_id, _ = bug
+    payload = repository.get_history(slug, item_id=bug_id)
+    assert payload["item"]["title"] == "BUG-431 login redirect loops"
+    assert payload["item"]["status"] == "todo"
+
+
+def test_project_history_is_unchanged_without_an_item_id(bug):
+    slug, _, _ = bug
+    contents = [e["content"] for e in repository.get_history(slug)["recent_logs"]]
+    assert "project-level note" in contents
+    assert "swept the logs" in contents
+
+
+def test_item_history_rejects_an_item_from_another_project(bug, temp_slug_b):
+    slug, _, _ = bug
+    repository.create_project(temp_slug_b, name="Other")
+    foreign = repository.add_item(temp_slug_b, "theirs")["item_id"]
+    assert repository.get_history(slug, item_id=foreign) == {"status": "unknown_item"}
+
+
+def test_a_closed_item_still_returns_its_history(bug):
+    """Resuming a finished bug must still show what happened."""
+    slug, bug_id, _ = bug
+    repository.set_status(slug, bug_id, "done")
+    payload = repository.get_history(slug, item_id=bug_id)
+    assert payload["item"]["status"] == "done"
+    assert len(payload["recent_logs"]) == 2

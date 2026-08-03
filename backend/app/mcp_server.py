@@ -148,11 +148,18 @@ def add_decision(
 
 
 @mcp.tool()
-def get_history(project: str, limit: int = 10) -> dict:
+def get_history(project: str, limit: int = 10, item_id: int | None = None) -> dict:
     """Use AFTER overview, when you are RESUMING work and need the full continuity
     payload in one call: open items + memory + the last `limit` session logs. Heavier
-    than overview — call it when you need the whole picture, not just a status check."""
-    return repository.get_history(project, limit=limit)
+    than overview — call it when you need the whole picture, not just a status check.
+    Pass `item_id` when resuming work on one specific item to get that item's whole
+    story — its logs, its files, its status — instead of the project's last N
+    entries. `item_id` is validated against this project: an item from another
+    project returns `{"status": "unknown_item"}`. An unknown project still returns
+    `{}`, unchanged."""
+    if item_id is None:
+        return repository.get_history(project, limit=limit)
+    return repository.get_history(project, limit=limit, item_id=item_id)
 
 
 @mcp.tool()

@@ -669,37 +669,85 @@ def search_logs(query: str, limit: int = 5) -> list[dict]:
         ]
 
 
-def get_history(slug: str, limit: int = 10) -> dict:
+def get_history(slug: str, limit: int = 10, item_id: int | None = None) -> dict:
     """Continuity payload for a new session — 'pull the history first'.
 
     Inventory: everything not closed, so stalled work stays discoverable — a
     `waiting` item still appears here even though it would never be offered as
     NEXT. Returns the project's not-closed items, recent memory, and recent
     session logs.
+
+    Pass `item_id` when resuming work on ONE item (a bug, a ticket) instead of the
+    whole project: every part of the payload narrows to that item — `open_items`
+    holds just its title (or is empty when it is closed), `memory` only its memory,
+    `recent_logs` only its logs — and an `item` block names its title and current
+    status, so a caller knows what it is looking at. `item_id` is validated
+    against THIS project (ownership, not mere existence).
+
+    Returns `{}` for an unknown project (unchanged) and `{"status": "unknown_item"}`
+    when `item_id` does not belong here — a deliberate asymmetry: the unknown-project
+    contract is relied on by every existing caller and stays as-is.
     """
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
             return {}
+
+        item = None
+        if item_id is not None:
+            item = db.scalar(
+                select(models.Item).where(
+                    models.Item.id == item_id, models.Item.project_id == project.id
+                )
+            )
+            if item is None:
+                return {"status": "unknown_item"}
+
         closed = st.names_in(st.CLOSED, extra=_vocabulary(db, project.id))
-        open_items = db.scalars(
-            select(models.Item)
-            .where(models.Item.project_id == project.id, models.Item.status.notin_(closed))
-            .order_by(models.Item.position, models.Item.id)
-        ).all()
-        recent_logs = db.scalars(
+
+        if item is not None:
+            open_items = [item.title] if item.status not in closed else []
+            memory_rows = db.scalars(
+                select(models.Memory)
+                .where(models.Memory.project_id == project.id, models.Memory.item_id == item_id)
+                .order_by(models.Memory.created_at.desc())
+            ).all()
+            memory = [
+                {
+                    "kind": m.kind, "title": m.title, "content": m.content, "url": m.url,
+                    "path": m.path, "item_id": m.item_id,
+                }
+                for m in memory_rows
+            ]
+        else:
+            open_items_rows = db.scalars(
+                select(models.Item)
+                .where(models.Item.project_id == project.id, models.Item.status.notin_(closed))
+                .order_by(models.Item.position, models.Item.id)
+            ).all()
+            open_items = [i.title for i in open_items_rows]
+            memory = list_memory(slug)
+
+        logs_query = (
             select(models.SessionLog)
             .join(models.Session)
             .where(models.Session.project_id == project.id)
-            .order_by(models.SessionLog.created_at.desc())
-            .limit(limit)
+        )
+        if item is not None:
+            logs_query = logs_query.where(models.SessionLog.item_id == item_id)
+        recent_logs = db.scalars(
+            logs_query.order_by(models.SessionLog.created_at.desc()).limit(limit)
         ).all()
-        return {
+
+        payload = {
             "project": project.slug,
-            "open_items": [i.title for i in open_items],
-            "memory": list_memory(slug),
+            "open_items": open_items,
+            "memory": memory,
             "recent_logs": [{"kind": l.kind, "content": l.content} for l in recent_logs],
         }
+        if item is not None:
+            payload["item"] = {"title": item.title, "status": item.status}
+        return payload
 
 
 # ---- seed & setup ----

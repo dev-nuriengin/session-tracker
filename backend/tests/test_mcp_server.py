@@ -27,6 +27,35 @@ def test_get_history_delegates_to_repository_with_project_and_limit(monkeypatch)
     assert result == {"project": "my-first-project", "open_items": [], "memory": [], "recent_logs": []}
 
 
+def test_get_history_delegates_item_id_when_given(monkeypatch):
+    calls = []
+
+    def fake_get_history(project, limit=10, item_id=None):
+        calls.append((project, limit, item_id))
+        return {"project": project, "open_items": [], "memory": [], "recent_logs": [],
+                "item": {"title": "BUG-431", "status": "todo"}}
+
+    monkeypatch.setattr(mcp_server.repository, "get_history", fake_get_history)
+
+    result = mcp_server.get_history("my-first-project", limit=5, item_id=42)
+
+    assert calls == [("my-first-project", 5, 42)]
+    assert result["item"] == {"title": "BUG-431", "status": "todo"}
+
+
+def test_get_history_passes_unknown_item_straight_through(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server.repository, "get_history", lambda *a, **k: {"status": "unknown_item"}
+    )
+    assert mcp_server.get_history("acme", item_id=999) == {"status": "unknown_item"}
+
+
+def test_get_history_docstring_tells_the_agent_when_to_pass_item_id():
+    text = mcp_server.get_history.__doc__.lower()
+    assert "item_id" in text
+    assert "resuming" in text
+
+
 def test_get_guidance_is_registered():
     assert mcp_server.mcp._tool_manager.get_tool("get_guidance") is not None
 

@@ -57,8 +57,40 @@ def status(project: str):
 
 
 @app.command()
-def show(project: str, full: bool = typer.Option(False, "--full", help="Deep view: all items, memory, logs")):
-    """Show a project — compact overview by default; --full for everything."""
+def show(
+    project: str,
+    full: bool = typer.Option(False, "--full", help="Deep view: all items, memory, logs"),
+    item: int = typer.Option(
+        None, "--item", help="Resume one item: its status, its memory (with paths), its logs"
+    ),
+):
+    """Show a project — compact overview by default; --full for everything; --item for one thing."""
+    if item is not None:
+        h = repository.get_history(project, item_id=item)
+        if not h:
+            typer.echo(f"Unknown project '{project}'.")
+            raise typer.Exit(1)
+        if h.get("status") == "unknown_item":
+            typer.echo(f"Unknown item #{item} in '{project}'.")
+            raise typer.Exit(1)
+        it = h["item"]
+        typer.echo(f"# {it['title']}  [{it['status']}]\n")
+        typer.echo("Memory:")
+        for m in h["memory"]:
+            line = f"  • [{m['kind']}] {m['content']}"
+            if m.get("url"):
+                line += f"  ({m['url']})"
+            if m.get("path"):
+                line += f"  ({m['path']})"
+            typer.echo(line)
+        if not h["memory"]:
+            typer.echo("  (none)")
+        typer.echo("\nSession logs:")
+        for log_ in h["recent_logs"]:
+            typer.echo(f"  • [{log_['kind']}] {log_['content']}")
+        if not h["recent_logs"]:
+            typer.echo("  (none)")
+        return
     if not full:
         ov = repository.overview(project)
         if not ov:
