@@ -7,6 +7,11 @@ the repository call and check the wiring, not the DB.
 from app import mcp_server
 
 
+def test_overview_is_registered_as_an_mcp_tool():
+    tool = mcp_server.mcp._tool_manager.get_tool("overview")
+    assert tool is not None
+
+
 def test_overview_passes_include_playbook_true_to_repository(monkeypatch):
     """This is the agent door — unlike the CLI/FastAPI callers of
     `repository.overview`, the MCP tool must opt into the playbook digest."""
