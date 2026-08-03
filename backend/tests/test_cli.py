@@ -105,7 +105,7 @@ def test_unchanged_is_reported_and_succeeds(monkeypatch):
 
 def test_add_status_succeeds(monkeypatch):
     _no_schema(monkeypatch)
-    monkeypatch.setattr(cli_mod.repository, "add_status", lambda *a, **k: "added")
+    monkeypatch.setattr(cli_mod.repository, "add_status", lambda *a, **k: {"status": "added"})
     result = runner.invoke(
         cli_mod.app, ["add-status", "acme", "parked", "--behaves-as", "waiting"]
     )
@@ -115,7 +115,7 @@ def test_add_status_succeeds(monkeypatch):
 
 def test_add_status_exits_non_zero_on_a_duplicate(monkeypatch):
     _no_schema(monkeypatch)
-    monkeypatch.setattr(cli_mod.repository, "add_status", lambda *a, **k: "duplicate_name")
+    monkeypatch.setattr(cli_mod.repository, "add_status", lambda *a, **k: {"status": "duplicate_name"})
     assert runner.invoke(
         cli_mod.app, ["add-status", "acme", "done", "--behaves-as", "open"]
     ).exit_code == 1

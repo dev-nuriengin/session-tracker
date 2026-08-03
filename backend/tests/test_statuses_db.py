@@ -29,48 +29,48 @@ def test_list_statuses_on_an_unknown_project_is_empty():
 
 
 def test_adding_a_name_appends_it_and_keeps_the_defaults(project):
-    assert repository.add_status(project, "parked", "waiting") == "added"
+    assert repository.add_status(project, "parked", "waiting") == {"status": "added"}
     names = [row["name"] for row in repository.list_statuses(project)]
     assert names == ["todo", "doing", "blocked", "done", "parked"]
 
 
 def test_a_name_that_is_already_a_default_is_a_duplicate(project):
-    assert repository.add_status(project, "done", "open") == "duplicate_name"
+    assert repository.add_status(project, "done", "open") == {"status": "duplicate_name"}
     # and the default is untouched
     by_name = {r["name"]: r["behaves_as"] for r in repository.list_statuses(project)}
     assert by_name["done"] == "closed"
 
 
 def test_adding_the_same_extra_twice_is_a_duplicate(project):
-    assert repository.add_status(project, "parked", "waiting") == "added"
-    assert repository.add_status(project, "parked", "waiting") == "duplicate_name"
+    assert repository.add_status(project, "parked", "waiting") == {"status": "added"}
+    assert repository.add_status(project, "parked", "waiting") == {"status": "duplicate_name"}
 
 
 def test_an_unrecognised_class_is_rejected(project):
-    assert repository.add_status(project, "sideways", "diagonal") == "unknown_class"
+    assert repository.add_status(project, "sideways", "diagonal")["status"] == "unknown_class"
     assert "sideways" not in [r["name"] for r in repository.list_statuses(project)]
 
 
 def test_a_blank_name_is_rejected(project):
-    assert repository.add_status(project, "   ", "waiting") == "invalid_name"
+    assert repository.add_status(project, "   ", "waiting") == {"status": "invalid_name"}
 
 
 def test_a_name_longer_than_the_column_is_rejected(project):
-    assert repository.add_status(project, "waiting-on-vendor-legal", "waiting") == "invalid_name"
+    assert repository.add_status(project, "waiting-on-vendor-legal", "waiting") == {"status": "invalid_name"}
 
 
 def test_a_name_at_the_length_limit_is_accepted(project):
     name = "x" * repository.MAX_STATUS_NAME
-    assert repository.add_status(project, name, "waiting") == "added"
+    assert repository.add_status(project, name, "waiting") == {"status": "added"}
 
 
 def test_a_name_is_stored_normalised(project):
-    assert repository.add_status(project, "  Parked  ", "waiting") == "added"
+    assert repository.add_status(project, "  Parked  ", "waiting") == {"status": "added"}
     assert "parked" in [r["name"] for r in repository.list_statuses(project)]
 
 
 def test_adding_to_an_unknown_project_reports_it():
-    assert repository.add_status("no-such-project-xyz", "parked", "waiting") == "unknown_project"
+    assert repository.add_status("no-such-project-xyz", "parked", "waiting") == {"status": "unknown_project"}
 
 
 def test_closed_names_starts_as_just_done(project):

@@ -156,14 +156,20 @@ def add_status(
     behaves_as: str = typer.Option(..., "--behaves-as", help="open | active | waiting | closed"),
 ):
     """Add a status name to a project. The four shipped names always stay valid."""
-    outcome = repository.add_status(project, name, behaves_as)
+    result = repository.add_status(project, name, behaves_as)
+    outcome = result["status"]
     if outcome == "added":
         typer.echo(f"✓ '{name}' added to {project} (behaves as {behaves_as})")
         return
+    if outcome == "unknown_class":
+        typer.echo(f"unknown class '{behaves_as}'. valid: {', '.join(result['valid'])}")
+        raise typer.Exit(1)
     messages = {
         "duplicate_name": f"'{name}' is already a status in {project}",
-        "unknown_class": f"unknown class '{behaves_as}'. valid: open, active, waiting, closed",
-        "invalid_name": f"a status name cannot be blank or longer than {repository.MAX_STATUS_NAME} characters",
+        "invalid_name": (
+            f"a status name cannot be blank or longer than "
+            f"{repository.MAX_STATUS_NAME} characters"
+        ),
         "unknown_project": f"unknown project '{project}'",
     }
     typer.echo(messages[outcome])

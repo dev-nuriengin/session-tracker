@@ -8,6 +8,7 @@ the tracker "do all the job" — real DB reads/writes live here, not a stub dict
 from pathlib import Path
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from . import models, statuses as st
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
@@ -322,29 +323,38 @@ def list_statuses(slug: str) -> list[dict]:
         return out
 
 
-def add_status(slug: str, name: str, behaves_as: str) -> str:
+def add_status(slug: str, name: str, behaves_as: str) -> dict:
     """Add one extra status name to a project. Returns an outcome, never raises.
 
-    Outcomes: added · duplicate_name · unknown_class · invalid_name · unknown_project
-    `invalid_name` covers both a blank name and one longer than the column allows
-    (MAX_STATUS_NAME) — an unvalidated long name would otherwise reach Postgres as
-    a raw DataError instead of a reported outcome.
+    Outcomes: added · duplicate_name · unknown_class (with `valid`) · invalid_name ·
+    unknown_project. `invalid_name` covers both a blank name and one longer than the
+    column allows (MAX_STATUS_NAME) — an unvalidated long name would otherwise reach
+    Postgres as a raw DataError instead of a reported outcome.
+
+    The duplicate check is belt AND braces: the pre-check gives a clean outcome in the
+    normal case, and the UniqueConstraint catches the check-then-insert race two
+    concurrent writers can lose. Both report `duplicate_name`, so a caller sees one
+    behaviour and never an IntegrityError — which over MCP would be a traceback.
     """
     name = name.strip().lower()
     if not name or len(name) > MAX_STATUS_NAME:
-        return "invalid_name"
+        return {"status": "invalid_name"}
     if behaves_as not in st.CLASSES:
-        return "unknown_class"
+        return {"status": "unknown_class", "valid": sorted(st.CLASSES)}
     with SessionLocal() as db:
         project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
         if project is None:
-            return "unknown_project"
+            return {"status": "unknown_project"}
         if name in _vocabulary(db, project.id):
             # covers both "already a shipped default" and "already added here"
-            return "duplicate_name"
+            return {"status": "duplicate_name"}
         db.add(models.ItemStatus(project_id=project.id, name=name, behaves_as=behaves_as))
-        db.commit()
-        return "added"
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()  # leave the session usable, not a poisoned transaction
+            return {"status": "duplicate_name"}
+        return {"status": "added"}
 
 
 def closed_names(slug: str) -> frozenset[str]:
