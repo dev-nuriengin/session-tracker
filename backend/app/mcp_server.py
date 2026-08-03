@@ -25,8 +25,10 @@ def list_projects() -> list[str]:
 def overview(project: str) -> dict:
     """Call this FIRST when you start on a project. A COMPACT summary — next step,
     open-item count + a few titles, how many are waiting, memory count, last
-    activity, and the status names this project accepts. It is cheap and does NOT
-    dump everything. Drill deeper with list_items / list_memory only if you need to."""
+    activity, the status names this project accepts, and Trackden's own playbook
+    digest. It is cheap and does NOT dump everything. Drill deeper with list_items /
+    list_memory only if you need to, and call get_playbook() for the playbook's
+    full text."""
     return repository.overview(project)
 
 

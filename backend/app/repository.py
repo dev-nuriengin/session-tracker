@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from . import models, statuses as st
+from . import models, playbook, statuses as st
 from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
 from .db import SessionLocal, init_db
 from .embeddings import embed
@@ -142,6 +142,10 @@ def overview(slug: str) -> dict:
             # the valid vocabulary travels with the summary, so a caller never has
             # to guess a status name — and never needs a second round trip to check
             "statuses": [{"name": n, "behaves_as": c} for n, c in vocabulary.items()],
+            # The rules ride in the payload an agent already fetches: it cannot be relied
+            # on to call get_playbook() for them. Steering, not a guarantee — the
+            # guarantee is a SessionStart hook, which is a separate increment.
+            "playbook": {"version": playbook.VERSION, "digest": playbook.DIGEST},
         }
 
 

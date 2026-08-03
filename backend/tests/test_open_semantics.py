@@ -170,3 +170,28 @@ def test_an_unrecognised_status_is_offered_as_the_next_step(temp_slug):
     assert ov["next"] == "legacy-item"
     assert ov["open_items"] == 1
     assert ov["waiting_items"] == 0   # offered, NOT filed as stalled
+
+
+def test_overview_carries_the_playbook_digest(project):
+    """An agent must not have to call a second tool to learn the rules."""
+    from app import playbook
+
+    slug, _ = project
+    carried = repository.overview(slug)["playbook"]
+    assert carried["version"] == playbook.VERSION
+    assert carried["digest"] == playbook.DIGEST
+
+
+def test_overview_keeps_every_pre_existing_key(project):
+    """A Next.js frontend consumes this shape — the digest is additive only."""
+    slug, _ = project
+    keys = set(repository.overview(slug))
+    assert {
+        "project", "next", "open_items", "open_preview",
+        "waiting_items", "memory_entries", "last_activity", "statuses",
+    } <= keys
+
+
+def test_an_unknown_project_still_returns_an_empty_dict():
+    """The digest must not turn a miss into a hit."""
+    assert repository.overview("no-such-project-xyz") == {}
