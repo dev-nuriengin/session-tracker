@@ -1,8 +1,8 @@
 """Phase 4 — the core schema.
 
     projects → folders (nestable) → items          (the work map)
-    projects → sessions → session_logs             (what happened, per session)
-    projects → memory                              (durable facts: links, notes)
+    projects → sessions → session_logs              (what happened, per session; may be item-scoped)
+    projects → memory                               (durable facts: links, notes; may be folder- or item-scoped)
     projects → item_statuses                       (EXTRA status names, on top of the defaults)
 
 This is Trackden's single source of truth. All doors (MCP, CLI, web) read
@@ -149,6 +149,12 @@ class SessionLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("sessions.id"), index=True)
     kind: Mapped[str] = mapped_column(String(20), default="note")  # note | step | summary | plan
+    # Which item this entry is about, when it is about one. Without this a log can
+    # only attach to a whole project, so one bug's findings sit in a pile with every
+    # other bug's. Nullable: plenty of progress is project-level.
+    item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tracking_items.id"), nullable=True, index=True
+    )
     content: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBED_DIM), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -173,6 +179,10 @@ class Memory(Base):
     title: Mapped[str | None] = mapped_column(String(300), nullable=True)
     content: Mapped[str] = mapped_column(Text)
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # e.g. GitLab/GitHub link
+    # Where a local artifact lives — a findings file, a meeting recording, an HTML dump.
+    # A path is not a URL, so it gets its own column rather than overloading `url`:
+    # one home per fact. Trackden stores this pointer and NEVER touches the file.
+    path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     project: Mapped["Project"] = relationship(back_populates="memory")

@@ -257,6 +257,19 @@ def items_with_folders(slug: str) -> list[TrackerItem]:
 
 # ---- folders & items ----
 
+def _next_position(db, model, project_id: int) -> int:
+    """One past the highest `position` in this project, or 0 when it is empty.
+
+    An explicit `is None` check, not `or` — position 0 is falsy, so `max or 0` would
+    collapse the second row back onto the first and reintroduce the queue-jumping bug
+    this exists to prevent.
+    """
+    highest = db.scalar(
+        select(func.max(model.position)).where(model.project_id == project_id)
+    )
+    return 0 if highest is None else highest + 1
+
+
 def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
     """Create a folder in a project. Returns an outcome, never raises.
 
@@ -290,10 +303,7 @@ def create_folder(slug: str, name: str, parent_id: int | None = None) -> dict:
             )
             if parent is None:
                 return {"status": "unknown_parent"}
-        max_position = db.scalar(
-            select(func.max(models.Folder.position)).where(models.Folder.project_id == project.id)
-        )
-        position = 0 if max_position is None else max_position + 1
+        position = _next_position(db, models.Folder, project.id)
         folder = models.Folder(project_id=project.id, name=name, parent_id=parent_id, position=position)
         db.add(folder)
         db.commit()
@@ -341,11 +351,10 @@ def add_item(slug: str, title: str, folder_id: int | None = None,
         # Append, never prepend: `import_items` assigns 0..n and queues order by
         # (position, id), so a new item at position 0 would jump ahead of work the
         # user already sequenced. One past the current max keeps it last; an empty
-        # project (no rows yet) yields position 0.
-        max_position = db.scalar(
-            select(func.max(models.Item.position)).where(models.Item.project_id == project.id)
-        )
-        position = 0 if max_position is None else max_position + 1
+        # project (no rows yet) yields position 0. Computed across the WHOLE project,
+        # not per folder — two folders sharing one position would make ordering
+        # ambiguous again.
+        position = _next_position(db, models.Item, project.id)
 
         item = models.Item(
             project_id=project.id, folder_id=folder_id, title=title, status=name, position=position

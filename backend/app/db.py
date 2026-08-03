@@ -48,6 +48,9 @@ def _migrate() -> None:
     """
     statements = (
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_path VARCHAR(500)",
+        "ALTER TABLE memory ADD COLUMN IF NOT EXISTS path VARCHAR(500)",
+        "ALTER TABLE session_logs ADD COLUMN IF NOT EXISTS item_id INTEGER "
+        "REFERENCES tracking_items(id)",
     )
     with engine.begin() as conn:
         for statement in statements:
