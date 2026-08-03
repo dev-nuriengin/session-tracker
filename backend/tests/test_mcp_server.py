@@ -132,3 +132,74 @@ def test_set_status_docstring_tells_the_agent_to_ask_before_closing():
     text = mcp_server.set_status.__doc__.lower()
     assert "ask" in text
     assert "close" in text or "closing" in text
+
+
+def test_the_write_side_tools_are_registered():
+    for name in ("add_item", "add_folder", "add_status"):
+        assert mcp_server.mcp._tool_manager.get_tool(name) is not None
+
+
+def test_add_item_tool_delegates_with_every_argument(monkeypatch):
+    seen = {}
+
+    def fake(slug, title, folder_id=None, status=None):
+        seen.update(slug=slug, title=title, folder_id=folder_id, status=status)
+        return {"status": "added", "item_id": 42}
+
+    monkeypatch.setattr(mcp_server.repository, "add_item", fake)
+    result = mcp_server.add_item("acme", "Fix it", folder_id=7, status="doing")
+    assert seen == {"slug": "acme", "title": "Fix it", "folder_id": 7, "status": "doing"}
+    assert result == {"status": "added", "item_id": 42}
+
+
+def test_add_item_tool_passes_an_unknown_status_straight_through(monkeypatch):
+    """The valid list must survive so the agent can correct itself."""
+    monkeypatch.setattr(
+        mcp_server.repository,
+        "add_item",
+        lambda *a, **k: {"status": "unknown_status", "valid": ["todo", "done"]},
+    )
+    assert mcp_server.add_item("acme", "x", status="nope")["valid"] == ["todo", "done"]
+
+
+def test_add_folder_tool_delegates_with_every_argument(monkeypatch):
+    seen = {}
+
+    def fake(slug, name, parent_id=None):
+        seen.update(slug=slug, name=name, parent_id=parent_id)
+        return {"status": "added", "folder_id": 7}
+
+    monkeypatch.setattr(mcp_server.repository, "create_folder", fake)
+    result = mcp_server.add_folder("acme", "Bugs", parent_id=3)
+    assert seen == {"slug": "acme", "name": "Bugs", "parent_id": 3}
+    assert result == {"status": "added", "folder_id": 7}
+
+
+def test_add_status_tool_delegates_with_every_argument(monkeypatch):
+    seen = {}
+
+    def fake(slug, name, behaves_as):
+        seen.update(slug=slug, name=name, behaves_as=behaves_as)
+        return {"status": "added"}
+
+    monkeypatch.setattr(mcp_server.repository, "add_status", fake)
+    result = mcp_server.add_status("acme", "parked", "waiting")
+    assert seen == {"slug": "acme", "name": "parked", "behaves_as": "waiting"}
+    assert result == {"status": "added"}
+
+
+def test_add_status_tool_hands_back_the_valid_classes(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server.repository,
+        "add_status",
+        lambda *a, **k: {"status": "unknown_class", "valid": ["active", "closed", "open", "waiting"]},
+    )
+    assert mcp_server.add_status("acme", "x", "diagonal")["valid"] == [
+        "active", "closed", "open", "waiting"
+    ]
+
+
+def test_add_status_description_tells_the_agent_to_offer_not_impose():
+    """Rule 6 of the coming playbook: offer a new name, do not invent one."""
+    text = mcp_server.add_status.__doc__.lower()
+    assert "offer" in text or "ask" in text

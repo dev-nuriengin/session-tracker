@@ -66,6 +66,53 @@ def list_statuses(project: str) -> list[dict]:
 
 
 @mcp.tool()
+def add_item(
+    project: str,
+    title: str,
+    folder_id: int | None = None,
+    status: str | None = None,
+) -> dict:
+    """Create a work item — use this when the user describes work that is not yet
+    tracked ("there's a bug in the login redirect"), so it exists before you start.
+
+    `folder_id` files it under a folder of THIS project (see add_folder); omit it to
+    put the item directly under the project. `status` sets a starting state and
+    defaults to `todo` — pass `doing` when the user is already working on it.
+
+    `status` in the RESULT is the outcome, not the item's state: added (with
+    `item_id`) · unknown_folder · unknown_status (with the `valid` list, so you can
+    correct yourself) · unknown_project."""
+    return repository.add_item(project, title, folder_id=folder_id, status=status)
+
+
+@mcp.tool()
+def add_folder(project: str, name: str, parent_id: int | None = None) -> dict:
+    """Create a folder to group a project's items. Ask the user before inventing a
+    structure — the shape of their work is theirs, not yours to impose.
+
+    `parent_id` nests this folder inside another folder of the SAME project.
+    Outcome: added (with `folder_id`) · unknown_parent · unknown_project."""
+    return repository.create_folder(project, name, parent_id=parent_id)
+
+
+@mcp.tool()
+def add_status(project: str, name: str, behaves_as: str) -> dict:
+    """Add a status name to this project's vocabulary. OFFER this, do not impose it:
+    when the user's real situation has no matching name ("on hold" is not "blocked"),
+    say so and ask whether to add one — never quietly force their state into a label
+    that is nearly right.
+
+    `behaves_as` is what the new name DOES, which is the part that matters:
+    open (not started) · active (being worked on) · waiting (stalled — skipped as the
+    next step but still counted) · closed (finished or abandoned). Explain the
+    behaviour to the user, not just the word.
+
+    Outcome: added · duplicate_name · unknown_class (with `valid`) · invalid_name ·
+    unknown_project."""
+    return repository.add_status(project, name, behaves_as)
+
+
+@mcp.tool()
 def list_memory(project: str) -> list[dict]:
     """Drill-down: the project's durable memory — repo links, notes, meeting
     transcripts. Decisions are NOT here: they live in the project's guidance file —
