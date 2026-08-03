@@ -107,6 +107,9 @@ restart so it loads). Your agent now has these tools:
 | `add_memory` | store a repo link, note, or meeting transcript |
 | `add_decision` | record a decision **and why**, into the project's decisions log |
 | `search` | semantic search across all session logs |
+| `add_item` | create a new item — an agent can put work into the tracker itself |
+| `add_folder` | create a new (optionally nested) folder |
+| `add_status` | add a project-specific status name, with the behaviour class it follows |
 
 > 💡 Try it: ask your agent *"what's the history of my-first-project?"* — it calls
 > `get_history` and answers from the tracker, not from guesswork.

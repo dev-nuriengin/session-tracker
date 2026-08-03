@@ -55,23 +55,31 @@ the rule that Trackden **remembers work and never decides it**.
 - **`trackden delete`** (removing a project) and indexing guidance in `search`. Both still
   open, both unrelated to this layer.
 
-## Staging — one spec, two shippable stages
+## Staging — one spec, four shippable stages
 
-This increment is larger than the guidance one, so it splits at a natural seam. Each stage
-ends green and is independently useful; neither leaves the tracker in a worse state than today.
+This increment is larger than the guidance one, so it splits at natural seams. Each stage
+ends green and is independently useful; none leaves the tracker in a worse state than today.
 
 | Stage | Contents | Why it stands alone |
 |---|---|---|
 | **A — unblock the loop** | `statuses.py` · `item_statuses` table · `set_status` on all three doors · `add_status` (repository + CLI) · the open-semantics change · the `_tracker.md` render rule | Fixes the blocker by itself. After Stage A the core loop works: items move, `whats_next` advances, the mirror tracks. Nothing here depends on the playbook. |
-| **B — teach the agent** | `playbook.py` · `get_playbook` + the digest in `overview` · `add_item` · `add_folder` · the MCP `add_status` tool · the `file` kind · item scoping · `get_history(item_id=…)` · CLI flags · the onboard print | Needs Stage A's vocabulary to reference in rules 4–6, so it comes second. Turns a working store into one an arriving agent can use unprompted. |
+| **B1 — an agent can create work ✅ delivered 2026-08-03** | `add_item` · `add_folder` (wraps repository `create_folder`) · the MCP `add_status` tool, plus the hardening each needed: `add_status` closes a check-then-insert race, `create_folder`/`add_item` validate that `parent_id`/`folder_id` belong to the same project, and `add_item` takes an optional starting `status` validated against the project's vocabulary | Needs only Stage A's vocabulary (`unknown_status`/`unknown_class`) — not item scoping, not the playbook. An agent can put work into the tracker with nothing else in Stage B built yet. |
+| **B2 — item scoping** | the `file` memory kind (`memory.path`) · item-scoped memory and logs (`memory.item_id`, `session_logs.item_id`) · `get_history(item_id=…)` · CLI flags `--item`/`--path` | Independent of B1 and B3 — wires a finding to the item it belongs to, and needs neither the write-side tools nor the playbook to work. |
+| **B3 — teach the agent** | `playbook.py` · `get_playbook` + the digest in `overview` · `trackden playbook` · the onboard print | Comes last on purpose: rules 8 and 9 tell an agent to use `add_memory(kind="file")` and to attach work to the item it belongs to — both B2 deliverables. Writing those rules before B1 and B2 ship would document tools that don't exist yet. |
+
+Stage B was split into B1/B2/B3 during planning because the three are independent of one
+another — B1 and B2 share no code and can ship in either order — while B3 is sequenced last
+because its own rules reference what B1 and B2 provide; shipping it earlier would mean
+telling an agent to call tools that don't exist.
 
 `add_status` (repository + CLI) moved from Stage B to Stage A on review: `item_statuses` is a
 table nothing could write to until it shipped, and an untestable table is dead weight. The
-*MCP* `add_status` tool stays in Stage B — it still leans on the playbook's rule 6 (how a new
-name gets offered) to make sense to an agent without a human prompting it.
+*MCP* `add_status` tool stayed in Stage B, and landed in **B1**: it still leans on the
+playbook's rule 6 (how a new name gets offered) to make sense to an agent without a human
+prompting it, even though the playbook's own text does not ship until B3.
 
-Recommended as one spec and two implementation plans, so the blocker can ship without waiting
-on the playbook's text.
+Recommended as one spec and multiple implementation plans, so the blocker can ship without
+waiting on the playbook's text.
 
 ## Architecture
 

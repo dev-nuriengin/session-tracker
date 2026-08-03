@@ -20,7 +20,7 @@ plug into it over MCP so they know where everything stands without you re-explai
 |---|---|
 | `trackden onboard` | Bring a project in. Reads a repo, offers to import its checklist behind a y/n/edit gate, scaffolds guidance in `~/.trackden`. Never writes to your repo. |
 | `trackden list` · `show <p>` · `status <p>` | See what you have and what's next. |
-| `trackden add-item <p> "…"` · `log` · `remember` | Add work, save progress, store a link or note. |
+| `trackden add-item <p> "…" [--status]` · `add-folder <p> "…" [--parent]` · `log` · `remember` | Add work (items, folders), save progress, store a link or note. `add-item` / `add-folder` / `add-status` are now available to an agent over MCP too. |
 | `trackden set-status <p> <item> <status>` · `add-status` · `statuses` | Move an item to a new status; add a project-specific status name; list what's valid. |
 | `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
 | `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
@@ -28,7 +28,8 @@ plug into it over MCP so they know where everything stands without you re-explai
 
 **What agents get over MCP:** `overview` (call first — cheap), `get_history`, `list_items`,
 `set_status`, `list_statuses`, `list_memory`, `get_guidance`, `whats_next`, `search`,
-`save_progress`, `add_memory`, `add_decision`, `list_projects`.
+`save_progress`, `add_memory`, `add_decision`, `list_projects`, `add_item`, `add_folder`,
+`add_status`.
 
 **Where things live — one home per fact.** DB owns *state* (projects, items, statuses,
 session logs). Files under `~/.trackden/projects/<slug>/` own *guidance* (way-of-work,
@@ -45,11 +46,11 @@ never hand-edit it. pgvector is a derived index, never a source.
 3. **Decisions go to a file, not the DB.** `add_memory` accepts `link | note | transcript`
    and *rejects* `decision`, pointing you at `add_decision` / `trackden decide`.
 
-**What Stage A still leaves open — know this before you rely on it:** an agent cannot yet
-**create** work — there is no `add_item` / `add_folder` over MCP, so only a human at the
-CLI can put new work into the tracker. And there is no shipped **playbook** yet — an
-arriving agent has tool descriptions and nothing else, no rule for when to save or how to
-pick a status. Both are Stage B; see "▸ NEXT" below.
+**What's still open after Stage B1 — know this before you rely on it:** there is no shipped
+**playbook** yet — an arriving agent has tool descriptions and nothing else, no rule for
+when to save or how to pick a status (Stage B3). And a finding still attaches to the whole
+project, not the item it belongs to — no `file` memory kind, no item-scoped memory/logs,
+no `get_history(item_id=…)` (Stage B2). See "▸ NEXT" below.
 
 **Settled:** an item whose stored status is in no vocabulary (a legacy row, or one set by
 hand in `psql`) is offered as NEXT. A queue query offers anything that is not `waiting`
@@ -127,15 +128,22 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT — Stage B: teach the agent.**
+**▸ NEXT — Stage B2, then B3: item scoping, then teach the agent.**
 
-Stage A unblocked the loop; Stage B teaches an arriving agent to use it without being told.
-Two things are missing: a shipped **playbook** (`playbook.py` + `get_playbook()`, with a
-digest riding inside every `overview` response so an agent gets the rules without a second
-call) and the **write-side MCP tools** (`add_item`, `add_folder`, `add_status`) so an agent —
-not just a human at the CLI — can put work into the tracker. Also in scope: the `file`
-memory kind, item-scoped memory/logs, and `get_history(item_id=…)`. See Phase 13 below and
-the "Stage B — teach the agent" row of the design spec.
+Stage A unblocked the loop. Stage B1 shipped 2026-08-03: an agent can now create work itself
+— `add_item`, `add_folder`, the MCP `add_status` tool — instead of needing a human at the
+CLI. See Phase 13 below for exactly what shipped.
+
+Two things are still missing. **Stage B2** wires memory and logs to the item they belong to:
+the `file` memory kind (`memory.path`), `session_logs.item_id`, `get_history(item_id=…)`,
+and the CLI's `--item` / `--path` flags — until this lands, a finding still attaches to the
+whole project rather than the bug it belongs to. **Stage B3** ships the **playbook**
+(`playbook.py` + `get_playbook()`, with a digest riding inside every `overview` response so
+an agent gets the rules without a second call), `trackden playbook`, and the onboard
+paste-snippet. B3 comes last on purpose: its rules tell an agent to use
+`add_memory(kind="file")` and to attach work to the item it belongs to — both B2 tools —
+so writing those rules before B2 ships would be instructions that lie. See Phase 13 below
+and the Stage B1/B2/B3 rows of the design spec.
 
 **Then, in order:** launcher/alias so agents call MCP *first* without being told (Phase 11)
 — today continuity depends on you remembering to say "check Trackden" · `trackden delete`
@@ -148,15 +156,16 @@ of by hand, retire this file.
 
 ---
 
-**Status:** 48 / 63 — all phases 0–13 have shipped their Stage A core. **But "phases done" ≠
-"usable day to day":** of the 15 open items, **none are life-support blockers any more** —
-the one gap that used to stop daily use (`set_status`) shipped in Stage A. Stage B (Phase 13)
-is what turns a working store into one an agent can use unprompted. Do not read this line
-as "finished".
+**Status:** 53 / 68 — all phases 0–13 have shipped their Stage A and Stage B1
+core. **But "phases done" ≠ "usable day to day":** of the 15 open items, **none are
+life-support blockers any more** — the one gap that used to stop daily use (`set_status`)
+shipped in Stage A, and an agent can now create work itself, unprompted (Stage B1,
+2026-08-03). Stage B2 (item scoping) and B3 (the playbook) are what remain before an
+arriving agent needs no priming at all. Do not read this line as "finished".
 
-- 🟡 **Phase 13 Stage B — teach the agent.** No playbook ships yet, and an agent still
-  cannot create work over MCP (`add_item` / `add_folder` / the MCP `add_status` tool don't
-  exist; only the CLI and repository can). See "▸ NEXT" above.
+- 🟡 **Phase 13 Stage B2/B3 — item scoping, then the playbook.** A finding still attaches to
+  the whole project, not the item it belongs to (no `file` memory kind, no
+  `session_logs.item_id`), and no playbook ships yet. See "▸ NEXT" above.
 - 🟡 **Phase 11 launcher/alias** — not a blocker, but it is what makes continuity automatic
   instead of dependent on you remembering to mention Trackden.
 - Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
@@ -265,7 +274,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `onboard.py` — read-only repo scan, in priority order: `_tracker.md` · `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `**/_tracker.md` · `CLAUDE.md` · `AGENTS.md` (the last two seed `_way-of-work.md`, never treated as sources of truth)
 - [x] `run_onboard` orchestrator: identify → scan+gate → DB project → scaffold → summary; the review gate (y/n/edit, blank = import) only ever runs while a project is itemless, so re-onboarding can't duplicate items
 - [x] `trackden onboard` CLI: interactive wizard + flags (`--name --kind --client --repo --no-import --yes/-y`)
-- [x] pytest enters the repo for the first time (81 tests then; 240 now, after the guidance and Stage A branches added more); DB-marked tests auto-skip when Postgres is unreachable
+- [x] pytest enters the repo for the first time (81 tests then; 275 now, after the guidance, Stage A, and Stage B1 branches added more); DB-marked tests auto-skip when Postgres is unreachable
 - [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
 - [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)
 
@@ -284,8 +293,12 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 ## Phase 13 — Behaviour layer: Stage A unblocks the loop, Stage B teaches the agent
 
 Spec: `docs/superpowers/specs/2026-08-01-trackden-behaviour-layer-design.md` (approved
-2026-08-01). Split into two shippable stages on purpose — Stage A fixes the blocker by
-itself; Stage B needs Stage A's vocabulary to reference, so it comes second.
+2026-08-01). Split into shippable stages on purpose — Stage A fixes the blocker by itself;
+Stage B needs Stage A's vocabulary to reference, so it comes second. Stage B was itself
+split into B1/B2/B3 during planning, because the three are independent of each other — B1
+(write-side MCP tools) and B2 (item scoping) don't depend on one another, and B3 (the
+playbook) is written last on purpose: its rules tell an agent to use tools B1 and B2
+provide, so writing them earlier would ship instructions that lie.
 
 ### Stage A — unblock the loop ✅ (shipped 2026-08-01)
 - [x] `statuses.py` — four fixed behaviour classes in code (`open` · `active` · `waiting` · `closed`); four shipped default names as data (`todo`→open, `doing`→active, `blocked`→waiting, `done`→closed)
@@ -297,12 +310,25 @@ itself; Stage B needs Stage A's vocabulary to reference, so it comes second.
 - [x] MCP tools `set_status`, `list_statuses` (tool count 11 → 13); CLI commands `set-status`, `add-status`, `statuses` (command count 13 → 16)
 - [x] Fixed the exit-0 bug: `add-folder`, `add-item` and `log` now exit non-zero on failure, matching `remember`
 
-### Stage B — teach the agent (open)
-- [ ] `playbook.py` — Trackden's own shipped, read-only rules: full text, a digest, a version — served by `get_playbook()`
-- [ ] The digest riding inside every `overview` response, so the rules land in context without a second call
-- [ ] Write-side MCP tools: `add_item`, `add_folder`, the MCP `add_status` tool (repository + CLI `add_status` already shipped in Stage A)
+### Stage B1 — an agent can create work ✅ (shipped 2026-08-03)
+- [x] `repository.add_status` — closes a check-then-insert race (the `UniqueConstraint` is caught, rolled back, and reported as `duplicate_name`); moved to the outcome-dict shape; `unknown_class` now carries the valid classes, so the CLI stopped hardcoding them
+- [x] `repository.create_folder` — validates `parent_id` belongs to the same project (a ForeignKey only proves a row exists, never that it's yours — a parent id from another project used to be accepted and the folder silently nested there; a nonexistent id was a raw `IntegrityError`); returns an outcome dict with `folder_id`
+- [x] `repository.add_item` — same ownership fix for `folder_id`, plus an optional starting `status` validated against the project's vocabulary (`unknown_status` with `valid`); returns an outcome dict with `item_id`
+- [x] MCP tools `add_item`, `add_folder`, `add_status` — thin wrappers (tool count 13 → 16)
+- [x] CLI: `add-folder` gained `--parent`, `add-item` gained `--status` (command count stays 16 — new flags, no new commands)
+
+### Stage B2 — item scoping (open)
 - [ ] The `file` memory kind (`memory.path`) — point at a local artifact (recording, `findings.md`, an HTML output) without Trackden touching the disk
 - [ ] Item-scoped memory and logs (`memory.item_id` wired through, `session_logs.item_id`) — a finding attaches to the item it belongs to
 - [ ] `get_history(item_id=…)` — the read side for item-scoped work
-- [ ] CLI flags `--item` (`remember`, `log`), `--path` (`remember`); `trackden playbook`
+- [ ] CLI flags `--item` (`remember`, `log`), `--path` (`remember`)
+
+### Stage B3 — the playbook (open, comes last on purpose)
+- [ ] `playbook.py` — Trackden's own shipped, read-only rules: full text, a digest, a version — served by `get_playbook()`
+- [ ] The digest riding inside every `overview` response, so the rules land in context without a second call
+- [ ] `trackden playbook` CLI command
 - [ ] `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md` (never written — the repo stays untouched)
+
+B3 is written last on purpose: its rules tell an agent to use `add_memory(kind="file")` and
+to attach work to the item it belongs to — both are B2 deliverables. Writing those rules
+before B2 ships would tell an agent to call tools that don't exist yet.
