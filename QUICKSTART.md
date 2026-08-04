@@ -71,6 +71,12 @@ uv run trackden list
 That's your structure. An "item" is domain-agnostic — a *ticket*, a *bill*, a *deliverable*;
 it's just a unit of work.
 
+Onboarded the wrong repo, or done with a project? `uv run trackden delete <project>`
+removes it and everything under it (items, folders, memory, sessions, logs) — it previews
+what it's about to remove and asks first (`--yes`/`-y` skips the prompt). Your guidance
+files in `~/.trackden/projects/<slug>/` are kept either way, and it tells you where.
+CLI only — there's no MCP tool for this, so an agent can't do it for you.
+
 ## 3 · Connect your agent — the heart (2 min)
 
 This is the point of the product: your agent plugs into the tracker over **MCP** and gets
