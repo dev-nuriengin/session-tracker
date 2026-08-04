@@ -11,7 +11,6 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from . import models, playbook, statuses as st
-from .data import PROJECTS, TRACKERS  # stub — used ONLY to seed the DB once
 from .db import SessionLocal, init_db
 from .embeddings import embed
 from .tracker_md import DONE, TODO, TrackerItem
@@ -772,27 +771,14 @@ def get_history(slug: str, limit: int = 10, item_id: int | None = None) -> dict:
 
 # ---- seed & setup ----
 
-def seed() -> None:
-    """One-time seed from the old stub so there's data to work with."""
-    with SessionLocal() as db:
-        if db.scalar(select(models.Project).limit(1)) is not None:
-            return  # already seeded
-        for slug in PROJECTS:
-            status = TRACKERS.get(slug, "")
-            kind = "client" if slug == "integral" else "personal"
-            project = models.Project(slug=slug, name=slug, kind=kind)
-            db.add(project)
-            db.flush()
-            title = (
-                status.split("NEXT:", 1)[-1].strip()
-                if "NEXT:" in status
-                else (status or "Set up project")
-            )
-            db.add(models.Item(project_id=project.id, title=title, status="todo", position=0))
-        db.commit()
-
-
 def setup() -> None:
-    """Create tables + seed once. Called on app startup."""
+    """Ensure the schema exists. Called on app startup.
+
+    This used to seed six stub projects from a hardcoded list, which was Phase 1
+    scaffolding the product long outgrew. It was actively harmful by the end: the
+    names were the author's real projects (one a work client), the module holding
+    them sat in a public repo, and anyone who started the API against a fresh
+    database got six fabricated projects they never created. Trackden's own data is
+    the user's, so it now starts empty and `trackden onboard` is the only way in.
+    """
     init_db()
-    seed()

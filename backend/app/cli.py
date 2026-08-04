@@ -32,9 +32,10 @@ def _ensure_schema() -> None:
     (e.g. `repo_path`), the first query would raise a raw `UndefinedColumn` — and
     since `cli.py` only catches `ValueError`, every command broke, not just `onboard`.
 
-    Deliberately `init_db()`, NOT `repository.setup()` — `setup()` also seeds six
-    stub projects, which would corrupt a real user's database. This only tops up
-    missing tables/columns (idempotent), never touches data.
+    `init_db()` only tops up missing tables/columns (idempotent) and never touches
+    data. It used to matter that this was NOT `repository.setup()`, because `setup()`
+    also seeded six stub projects into whatever database it found; that seeding is
+    gone, so the two are equivalent now and either would be safe here.
     """
     init_db()
 

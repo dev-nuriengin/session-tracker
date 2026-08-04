@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    services:
+      # pgvector, not plain postgres: `init_db` runs `CREATE EXTENSION vector`,
+      # and the session-log embeddings live in a `vector` column.
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: session
+          POSTGRES_PASSWORD: session
+          POSTGRES_DB: session_tracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U session"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # conftest.py derives the test database from this by appending `_test`, and
+      # refuses to run against any name that does not end in `_test`/`_smoke`.
+      DATABASE_URL: postgresql+psycopg://session:session@localhost:5432/session_tracker
+      # With CI set, a `@pytest.mark.db` test whose database is unreachable FAILS
+      # instead of skipping — a green run here must not mean "the DB tests didn't run".
+      CI: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run the suite
+        working-directory: backend
+        run: uv run pytest -q
