@@ -7,7 +7,7 @@ the tracker "do all the job" — real DB reads/writes live here, not a stub dict
 
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from . import models, playbook, statuses as st
@@ -264,6 +264,83 @@ def items_with_folders(slug: str) -> list[TrackerItem]:
         ).all()
         return [{"title": title, "status": status, "folder": folder}
                 for title, status, folder in rows]
+
+
+def _counts(db, project_id: int) -> dict:
+    """Row counts for everything hanging off one project. Takes an open session."""
+    session_ids = db.scalars(
+        select(models.Session.id).where(models.Session.project_id == project_id)
+    ).all()
+
+    def count(model, *where):
+        return db.scalar(select(func.count()).select_from(model).where(*where)) or 0
+
+    return {
+        "items": count(models.Item, models.Item.project_id == project_id),
+        "folders": count(models.Folder, models.Folder.project_id == project_id),
+        "memory": count(models.Memory, models.Memory.project_id == project_id),
+        "sessions": len(session_ids),
+        "logs": (
+            count(models.SessionLog, models.SessionLog.session_id.in_(session_ids))
+            if session_ids else 0
+        ),
+        "statuses": count(models.ItemStatus, models.ItemStatus.project_id == project_id),
+    }
+
+
+def project_counts(slug: str) -> dict:
+    """What is attached to a project. Powers `trackden delete`'s preview.
+
+    Delete is the only irreversible operation here, so the user sees what goes
+    before it goes rather than after.
+    """
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return {"status": "unknown_project"}
+        return {"status": "counted", **_counts(db, project.id)}
+
+
+def delete_project(slug: str) -> dict:
+    """Remove a project and everything under it. Returns an outcome, never raises.
+
+    Outcomes: deleted (with `removed` counts) · unknown_project
+
+    THE ORDER MATTERS, and it is not something the ORM can work out. `Memory.item_id`
+    and `Memory.folder_id` reference `tracking_items` / `folders`, and
+    `SessionLog.item_id` references `tracking_items` — but none of those has a declared
+    ORM relationship. `Memory` relates only to `Project`, `SessionLog` only to `Session`.
+    So the unit of work has no way to know a memory row must go before the item it
+    points at, and `db.delete(project)` alone can delete that item first and raise a FK
+    violation. Reproduced as a real failure during Stage B2, not theorised.
+
+    So: session logs (reached via their session — SessionLog has no project_id of its
+    own) → memory → the project, whose per-relationship cascades then clear items,
+    folders, sessions and statuses safely. One transaction.
+
+    Guidance files under `~/.trackden/projects/<slug>/` are deliberately NOT touched.
+    They are human-written, and `_decisions.md` is append-only by design. Losing
+    hand-written decisions to a mistyped slug would be a far worse bug than leaving a
+    folder behind; the CLI tells the user where it is.
+    """
+    with SessionLocal() as db:
+        project = db.scalar(select(models.Project).where(models.Project.slug == slug.strip().lower()))
+        if project is None:
+            return {"status": "unknown_project"}
+
+        removed = _counts(db, project.id)
+
+        session_ids = db.scalars(
+            select(models.Session.id).where(models.Session.project_id == project.id)
+        ).all()
+        if session_ids:
+            db.execute(
+                delete(models.SessionLog).where(models.SessionLog.session_id.in_(session_ids))
+            )
+        db.execute(delete(models.Memory).where(models.Memory.project_id == project.id))
+        db.delete(project)
+        db.commit()
+        return {"status": "deleted", "removed": removed}
 
 
 # ---- folders & items ----

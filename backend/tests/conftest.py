@@ -71,52 +71,20 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return workspace
 
 
-def _delete_project_cascading(db, project) -> None:
-    """Delete a project and everything under it.
-
-    `Memory.item_id` / `Memory.folder_id` reference `tracking_items` / `folders`, but
-    Memory has no declared ORM relationship to Item or Folder — only to Project — so
-    the unit of work has no way to know a memory row must be removed before the item
-    or folder it points at. Left to `db.delete(project)` alone, the ORM's per-relationship
-    cascade (`Project.items`, `Project.memory`, …) can delete a referenced tracking_item
-    before the memory row pointing at it, raising a FK violation. Harmless before Task 2
-    (item_id/folder_id were always NULL); real now that add_memory populates them.
-    Bulk-deleting memory first sidesteps the ordering question entirely.
-
-    Same problem, one hop further, for `SessionLog.item_id`: SessionLog has an ORM
-    relationship to Session (which cascades from Project just fine) but none to Item,
-    so the unit of work still doesn't know a session_logs row pointing at an item must
-    go before that item. Bulk-delete those too — reached via their Session, since
-    SessionLog has no project_id of its own.
-    """
-    from sqlalchemy import delete, select
-
-    from app import models
-
-    session_ids = db.scalars(
-        select(models.Session.id).where(models.Session.project_id == project.id)
-    ).all()
-    if session_ids:
-        db.execute(delete(models.SessionLog).where(models.SessionLog.session_id.in_(session_ids)))
-    db.execute(delete(models.Memory).where(models.Memory.project_id == project.id))
-    db.delete(project)  # cascades to folders / items / sessions
-    db.commit()
-
-
 @pytest.fixture
 def temp_slug():
-    """A project slug that is deleted from the (test) DB afterwards (db-marked tests)."""
+    """A project slug that is deleted from the (test) DB afterwards (db-marked tests).
+
+    Teardown delegates to `repository.delete_project`, the product's own delete
+    semantics (order: session logs -> memory -> project — see its docstring). A
+    test that already deleted this slug leaves teardown an honest `unknown_project`
+    miss, not an error.
+    """
     slug = "pytest-onboard-tmp"
     yield slug
-    from sqlalchemy import select
+    from app import repository
 
-    from app import models
-    from app.db import SessionLocal
-
-    with SessionLocal() as db:
-        project = db.scalar(select(models.Project).where(models.Project.slug == slug))
-        if project is not None:
-            _delete_project_cascading(db, project)
+    repository.delete_project(slug)
 
 
 @pytest.fixture
@@ -124,15 +92,9 @@ def temp_slug_b():
     """A SECOND disposable project slug, for tests that need two (db-marked)."""
     slug = "pytest-onboard-tmp-b"
     yield slug
-    from sqlalchemy import select
+    from app import repository
 
-    from app import models
-    from app.db import SessionLocal
-
-    with SessionLocal() as db:
-        project = db.scalar(select(models.Project).where(models.Project.slug == slug))
-        if project is not None:
-            _delete_project_cascading(db, project)
+    repository.delete_project(slug)
 
 
 def _server_reachable(admin_url) -> bool:
