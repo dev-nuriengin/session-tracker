@@ -399,6 +399,29 @@ def test_onboard_with_no_guidance_file_still_gets_the_plain_template(home, fake_
     assert "# Way of work — P4" in content
 
 
+# ---- FIX 3 (delete re-review): reusing a deleted slug's leftover guidance ----
+
+
+def test_onboard_flags_reused_guidance_from_a_previous_projects_slug(home, fake_db):
+    """`scaffold_project` correctly never overwrites an existing guidance file — but
+    combined with `delete` deliberately leaving the folder behind, onboarding the
+    SAME slug for a DIFFERENT project silently inherits the old client's
+    `_decisions.md` / `_way-of-work.md`. Nobody was told. `guidance_reused` is how
+    `run_onboard` surfaces that fact, so the CLI can warn about it."""
+    from app.workspace import scaffold_project
+
+    scaffold_project("reused-slug", name="Old Client")  # simulates a leftover folder
+    result = run_onboard(slug="reused-slug", name="New Client", repo=None)
+
+    assert result.created is True
+    assert result.guidance_reused is True
+
+    # Sanity: a genuinely fresh slug (nothing on disk beforehand) must NOT be flagged.
+    fresh = run_onboard(slug="brand-new-slug", repo=None)
+    assert fresh.created is True
+    assert fresh.guidance_reused is False
+
+
 # ---- FIX 7: no length validation on slug or name ----
 
 from app import models  # noqa: E402 — mid-file imports match this file's existing style

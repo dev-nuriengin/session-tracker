@@ -71,6 +71,25 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return workspace
 
 
+_TEARDOWN_OUTCOMES = ("deleted", "unknown_project")
+
+
+def _assert_clean_teardown(slug: str, outcome: dict) -> None:
+    """Fail loudly if teardown's own delete didn't do what it claims.
+
+    Only `deleted` (the test's project still existed) and `unknown_project` (a test
+    already removed it) are legitimate — anything else is a regression that would
+    otherwise leak silently: state from THIS test surviving into the next one, only
+    surfacing as a confusing failure somewhere else entirely.
+    """
+    status = outcome.get("status")
+    assert status in _TEARDOWN_OUTCOMES, (
+        f"teardown delete of {slug!r} returned unexpected status {status!r} "
+        f"(expected one of {_TEARDOWN_OUTCOMES}) — the project may not have been "
+        "cleaned up, and later tests could see stale state"
+    )
+
+
 @pytest.fixture
 def temp_slug():
     """A project slug that is deleted from the (test) DB afterwards (db-marked tests).
@@ -84,7 +103,7 @@ def temp_slug():
     yield slug
     from app import repository
 
-    repository.delete_project(slug)
+    _assert_clean_teardown(slug, repository.delete_project(slug))
 
 
 @pytest.fixture
@@ -94,7 +113,7 @@ def temp_slug_b():
     yield slug
     from app import repository
 
-    repository.delete_project(slug)
+    _assert_clean_teardown(slug, repository.delete_project(slug))
 
 
 def _server_reachable(admin_url) -> bool:

@@ -88,10 +88,17 @@ def test_every_tool_the_text_names_actually_exists():
 
 
 def test_the_text_says_an_agent_cannot_delete():
-    """Delete is CLI-only on purpose — an agent that doesn't know will offer and fail."""
+    """Delete is CLI-only on purpose — an agent that doesn't know will offer and fail.
+
+    Was: `assert "delete" in lowered` / `assert "cannot" in lowered or "no tool" in
+    lowered` — both satisfied by unrelated prose ("delete**s**" elsewhere, and "You
+    **cannot** reliably tell how much time has passed" in section 3), so removing the
+    intended sentence left this green. Asserts on the phrases only that sentence
+    contains instead, so it actually discriminates.
+    """
     lowered = playbook.TEXT.lower()
-    assert "delete" in lowered
-    assert "cannot" in lowered or "no tool" in lowered
+    assert "no delete tool" in lowered
+    assert "trackden delete" in lowered
 
 
 def test_the_module_is_pure():

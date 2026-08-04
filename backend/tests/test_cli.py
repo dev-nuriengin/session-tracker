@@ -473,3 +473,52 @@ def test_delete_survives_a_slug_workspace_rejects(monkeypatch):
     result = runner.invoke(cli_mod.app, ["delete", "acme", "--yes"])
     assert result.exit_code == 0, result.output
     assert "kept your guidance files" not in result.output
+
+
+def test_delete_reports_kept_files_for_a_capitalised_slug(monkeypatch, tmp_path):
+    """`repository` lowercases the slug; workspace's guard rejects uppercase. Without
+    normalising in the command, this case silently lost the one notice the keep-files
+    decision depends on."""
+    _no_schema(monkeypatch)
+    guidance = tmp_path / "projects" / "acme"
+    guidance.mkdir(parents=True)
+    (guidance / "_decisions.md").write_text("# Decisions", encoding="utf-8")
+    seen = {}
+    def project_dir(slug, home=None):
+        seen["slug"] = slug
+        return guidance
+    monkeypatch.setattr(cli_mod.workspace_mod, "project_dir", project_dir)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 0, "folders": 0, "memory": 0,
+                      "sessions": 0, "logs": 0, "statuses": 0},
+    )
+    monkeypatch.setattr(
+        cli_mod.repository, "delete_project", lambda slug: {"status": "deleted", "removed": {}}
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "ACME", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert seen["slug"] == "acme", "the command must normalise before asking workspace"
+    assert "_decisions.md" in result.output or str(guidance) in result.output
+
+
+def test_delete_echoes_the_actual_removed_counts(monkeypatch):
+    """FIX 4: the preview and the delete run in separate transactions and can
+    legitimately diverge (an MCP-connected agent can add rows while the human reads
+    the prompt) — the CLI must echo what was ACTUALLY removed, not just the preview."""
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 1, "folders": 0, "memory": 0,
+                      "sessions": 0, "logs": 0, "statuses": 0},
+    )
+    monkeypatch.setattr(
+        cli_mod.repository, "delete_project",
+        lambda slug: {"status": "deleted", "removed": {
+            "items": 3, "folders": 0, "memory": 0, "sessions": 0, "logs": 0, "statuses": 0,
+        }},
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "acme", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "✓ deleted 'acme'" in result.output
+    assert "items      3" in result.output

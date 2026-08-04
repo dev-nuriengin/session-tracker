@@ -147,6 +147,15 @@ class OnboardResult:
     sources: list[str]
     files: list[Path]
     git_ready: bool
+    # True only for a NEWLY created project whose guidance folder already held one
+    # (or more) of the three human-authored docs before scaffolding ran — i.e. the
+    # slug was used before (typically: onboarded, then `delete`d, which keeps the
+    # folder on purpose) and this onboard is silently reusing that old project's
+    # `_way-of-work.md` / `_arch.md` / `_decisions.md`. `scaffold_project` never
+    # overwrites an existing guidance file — correct, since it may hold hand-written
+    # knowledge — but nobody was told the reuse happened. This is how the CLI knows
+    # to say so.
+    guidance_reused: bool = False
 
 
 def run_onboard(
@@ -259,6 +268,17 @@ def run_onboard(
     )
     git_ready = workspace.ensure_home_git(home)
 
+    # `scaffold_project` returns only the paths it WROTE — an existing guidance file
+    # it left untouched is not in that list, so its absence is how reuse is detected
+    # (rather than re-checking `.exists()` after the fact, which would always be
+    # true and prove nothing). Gated on `created`: an already-existing project
+    # picking up its OWN prior guidance on a re-run is normal, not reuse.
+    guidance_dir = workspace.project_dir(slug, home)
+    guidance_reused = created and any(
+        (guidance_dir / filename) not in files
+        for filename in workspace.GUIDANCE_DOCS.values()
+    )
+
     return OnboardResult(
         slug=slug,
         name=display,
@@ -267,4 +287,5 @@ def run_onboard(
         sources=sources,
         files=files,
         git_ready=git_ready,
+        guidance_reused=guidance_reused,
     )

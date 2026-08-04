@@ -341,6 +341,21 @@ def log(
     raise typer.Exit(1)
 
 
+_COUNT_LABELS = ("items", "folders", "memory", "sessions", "logs", "statuses")
+
+
+def _echo_counts(counts: dict, empty_message: str) -> None:
+    """Print the nonzero rows of a counts dict, one per line — shared by the
+    delete preview and the post-delete "what actually went" echo, so the two
+    always render in the same shape."""
+    nonzero = [label for label in _COUNT_LABELS if counts.get(label)]
+    if nonzero:
+        for label in nonzero:
+            typer.echo(f"  {label:<10} {counts[label]}")
+    else:
+        typer.echo(f"  {empty_message}")
+
+
 _GATE_PREVIEW = 10  # show at most this many items before asking
 
 
@@ -453,6 +468,18 @@ def onboard(
         typer.echo(f"      • {path}")
     if not result.git_ready:
         typer.echo("  ⚠ workspace is not a git repo (git unavailable) — guidance is unversioned")
+    if result.guidance_reused:
+        # `scaffold_project` never overwrites an existing guidance file — correct,
+        # since delete keeps a project's `_way-of-work.md` / `_arch.md` /
+        # `_decisions.md` on purpose. But that means onboarding a slug that was used
+        # before (deleted, then re-onboarded — same or different client) silently
+        # inherits whatever the previous project wrote there. Say so, so a human
+        # checks it rather than trusting it as this project's own.
+        typer.echo(
+            f"  ⚠ guidance files from a previous project with slug '{result.slug}' "
+            f"were reused: {workspace_mod.project_dir(result.slug)}\n"
+            "    check them — they may describe a different project"
+        )
     typer.echo(f"\nNext:  trackden show {result.slug}")
 
     typer.echo(
@@ -510,6 +537,16 @@ def delete(
 
     This is the only irreversible command, so it shows what will go and asks first.
     """
+    # Normalise ONCE, here, so every downstream call (repository, workspace) agrees
+    # on the same slug. `repository` already lowercases internally, but
+    # `workspace.project_dir`'s `_SAFE_SLUG` guard rejects uppercase outright — so
+    # `trackden delete ACME` used to delete the (lowercased) project, print success,
+    # then silently lose the "kept your guidance files" notice when `project_dir`
+    # raised on the un-normalised "ACME". Normalising here makes that unreachable
+    # for ordinary input; the ValueError guard below now only protects against a
+    # genuinely unsafe slug (e.g. one containing "..").
+    project = project.strip().lower()
+
     counts = repository.project_counts(project)
     if counts["status"] == "unknown_project":
         typer.echo(f"unknown project '{project}'")
@@ -517,13 +554,7 @@ def delete(
 
     if not yes:
         typer.echo(f"About to delete '{project}' and everything under it:")
-        labels = ("items", "folders", "memory", "sessions", "logs", "statuses")
-        nonzero = [label for label in labels if counts[label]]
-        if nonzero:
-            for label in nonzero:
-                typer.echo(f"  {label:<10} {counts[label]}")
-        else:
-            typer.echo("  (nothing attached — just the project record itself)")
+        _echo_counts(counts, "(nothing attached — just the project record itself)")
         typer.echo("  This cannot be undone.")
         if not typer.confirm("Delete it?"):
             typer.echo("aborted — nothing was deleted")
@@ -535,6 +566,11 @@ def delete(
         raise typer.Exit(1)
 
     typer.echo(f"✓ deleted '{project}'")
+    # The preview ran in a separate transaction from the delete itself, so the two
+    # can legitimately differ — an MCP-connected agent can add rows while the human
+    # reads the prompt. Echoing the actual removed counts makes that divergence
+    # visible instead of silently trusting the (possibly stale) preview.
+    _echo_counts(result.get("removed", {}), "(nothing was attached)")
     try:
         kept = workspace_mod.project_dir(project)
     except ValueError:
