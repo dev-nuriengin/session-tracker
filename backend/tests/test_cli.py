@@ -371,3 +371,85 @@ def test_playbook_needs_no_project(monkeypatch):
     """Product-wide: it must not require a project argument."""
     _no_schema(monkeypatch)
     assert runner.invoke(cli_mod.app, ["playbook"]).exit_code == 0
+
+
+def test_delete_shows_a_preview_and_asks_before_deleting(monkeypatch):
+    """The only irreversible command: it must not act on one word."""
+    _no_schema(monkeypatch)
+    called = {}
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 4, "folders": 1, "memory": 2,
+                      "sessions": 1, "logs": 7, "statuses": 0},
+    )
+    monkeypatch.setattr(
+        cli_mod.repository, "delete_project",
+        lambda slug: called.setdefault("slug", slug) or {"status": "deleted", "removed": {}},
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "acme"], input="y\n")
+    assert result.exit_code == 0, result.output
+    # the preview names the real counts, so the user is not agreeing blind
+    assert "4" in result.output and "7" in result.output
+    assert called["slug"] == "acme"
+
+
+def test_delete_aborts_when_the_user_says_no(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 1, "folders": 0, "memory": 0,
+                      "sessions": 0, "logs": 0, "statuses": 0},
+    )
+    def refuse(slug):
+        raise AssertionError("delete_project must not be called after a refusal")
+    monkeypatch.setattr(cli_mod.repository, "delete_project", refuse)
+    result = runner.invoke(cli_mod.app, ["delete", "acme"], input="n\n")
+    assert result.exit_code == 1
+    assert "aborted" in result.output.lower() or "cancelled" in result.output.lower()
+
+
+def test_delete_yes_skips_the_prompt(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 0, "folders": 0, "memory": 0,
+                      "sessions": 0, "logs": 0, "statuses": 0},
+    )
+    monkeypatch.setattr(
+        cli_mod.repository, "delete_project",
+        lambda slug: {"status": "deleted", "removed": {"items": 0}},
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "acme", "--yes"])
+    assert result.exit_code == 0, result.output
+
+
+def test_delete_exits_non_zero_for_an_unknown_project(monkeypatch):
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts", lambda slug: {"status": "unknown_project"}
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "nope", "--yes"])
+    assert result.exit_code == 1
+    assert "nope" in result.output
+
+
+def test_delete_says_the_guidance_files_were_kept(monkeypatch, tmp_path):
+    """The user must know the hand-written files survived, and where they are."""
+    _no_schema(monkeypatch)
+    guidance = tmp_path / "projects" / "acme"
+    guidance.mkdir(parents=True)
+    (guidance / "_decisions.md").write_text("# Decisions", encoding="utf-8")
+    monkeypatch.setattr(cli_mod.workspace_mod, "project_dir", lambda slug, home=None: guidance)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 0, "folders": 0, "memory": 0,
+                      "sessions": 0, "logs": 0, "statuses": 0},
+    )
+    monkeypatch.setattr(
+        cli_mod.repository, "delete_project",
+        lambda slug: {"status": "deleted", "removed": {}},
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "acme", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "_decisions.md" in result.output or str(guidance) in result.output
+    assert guidance.exists(), "the CLI must not delete the guidance folder"

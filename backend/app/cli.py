@@ -14,6 +14,7 @@ from . import guidance as guidance_mod
 from . import onboard as onboard_mod
 from . import playbook as playbook_mod
 from . import repository
+from . import workspace as workspace_mod
 from .db import init_db
 
 app = typer.Typer(
@@ -498,6 +499,49 @@ def decide(
 def playbook():
     """Print Trackden's own rules for using Trackden (what agents read)."""
     typer.echo(playbook_mod.TEXT)
+
+
+@app.command()
+def delete(
+    project: str,
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
+):
+    """Remove a project and everything under it. Guidance files are kept.
+
+    This is the only irreversible command, so it shows what will go and asks first.
+    """
+    counts = repository.project_counts(project)
+    if counts["status"] == "unknown_project":
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
+
+    if not yes:
+        typer.echo(f"About to delete '{project}' and everything under it:")
+        labels = ("items", "folders", "memory", "sessions", "logs", "statuses")
+        nonzero = [label for label in labels if counts[label]]
+        if nonzero:
+            for label in nonzero:
+                typer.echo(f"  {label:<10} {counts[label]}")
+        else:
+            typer.echo("  (nothing attached — just the project record itself)")
+        typer.echo("  This cannot be undone.")
+        if not typer.confirm("Delete it?"):
+            typer.echo("aborted — nothing was deleted")
+            raise typer.Exit(1)
+
+    # `project_counts` above already confirmed the project exists, so its return
+    # shape isn't re-checked here — this is a local single-user tool with no
+    # concurrent deletion to race against.
+    repository.delete_project(project)
+
+    typer.echo(f"✓ deleted '{project}'")
+    try:
+        kept = workspace_mod.project_dir(project)
+    except ValueError:
+        kept = None
+    if kept is not None and kept.exists():
+        typer.echo(f"  kept your guidance files (way-of-work, arch, decisions): {kept}")
+        typer.echo("  delete that folder yourself if you really want it gone")
 
 
 if __name__ == "__main__":
