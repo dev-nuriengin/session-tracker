@@ -24,7 +24,7 @@ plug into it over MCP so they know where everything stands without you re-explai
 | `trackden show <p> --item <id>` | The whole story of one item: its status, its memory (with file paths), its logs — narrowed to just that item. |
 | `trackden set-status <p> <item> <status>` · `add-status` · `statuses` | Move an item to a new status; add a project-specific status name; list what's valid. |
 | `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
-| `trackden playbook` | Print Trackden's own rules for using Trackden — the full text (seven sections); the same digest already rides inside every `overview` response. Needs no project — works before any project exists. |
+| `trackden playbook` | Print Trackden's own rules for using Trackden — the full text (seven sections). The short digest rides inside the **MCP** `overview` response, so agents get it without asking. Needs no project — works before any project exists. |
 | `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
 | `trackden ask "…"` | Semantic search across every project's session logs. |
 
@@ -63,17 +63,21 @@ never hand-edit it. pgvector is a derived index, never a source.
    together. Verified by hand at the CLI, not just in pytest: two throwaway projects, both
    logging on the default `--thread cli`, each `show --full` afterwards showed only its own
    note.
-5. **Every `overview` call now carries Trackden's own playbook digest — Stage B3, shipped
-   2026-08-03.** `overview`'s response gains a ninth key, `playbook: {version, digest}`, so
-   an agent gets steering rules without a second tool call; an unknown project still returns
-   exactly `{}`. The full text (seven sections) is `get_playbook()` / `trackden playbook`.
+5. **An agent's `overview` call now carries Trackden's own playbook digest — Stage B3, shipped
+   2026-08-03.** `repository.overview(slug, include_playbook=False)` adds a ninth key,
+   `playbook: {version, digest}`, **only when asked** — the MCP tool passes `True`, so an
+   agent gets steering rules without a second tool call, while `trackden show` and the
+   FastAPI endpoint keep the original eight-key shape. Steering belongs at the agent door,
+   and the web UI has no use for 1.5 KB of agent instructions on every poll. An unknown
+   project still returns exactly `{}` either way. The full text (seven sections) is
+   `get_playbook()` / `trackden playbook`.
    `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md`/`AGENTS.md`
    pointing at `overview()` and the playbook — it is only ever **printed**, never written;
    the repo stays untouched (proved by a recursive, directory-safe before/after snapshot of
    every file in the scanned repo).
 
 **What's still open after Stage B3 — know this before you rely on it:** the playbook now
-ships (`playbook.py`, `get_playbook`, the digest inside every `overview`, `trackden
+ships (`playbook.py`, `get_playbook`, the digest inside the MCP `overview`, `trackden
 playbook`, the onboard paste-snippet — all Stage B3, shipped 2026-08-03), and everything it
 teaches is steering, not a guarantee — nothing forces an agent to read `overview`'s response
 or act on what it says. **The only mechanical guarantee is still unbuilt: the `SessionStart`
@@ -171,11 +175,12 @@ path expanded and absolute; `show --item` narrows to one item's logs and memory;
 is fixed. See Phase 13 below for exactly what shipped.
 
 **Stage B3 shipped 2026-08-03 too — the playbook.** `playbook.py` (pure, product-owned:
-`VERSION = 1`, an eleven-rule `DIGEST` at 1411 of a 1500-character budget, and a
+`VERSION = 1`, an eleven-rule `DIGEST` at 1521 of a 1700-character budget, and a
 seven-section `TEXT`), `get_playbook()` (MCP tool count 16 → 17; needs no project, works
 before any project exists), `trackden playbook` (CLI command count 16 → 17), the digest
-riding inside every `overview` response (`playbook: {version, digest}`, a ninth key,
-alongside all eight pre-existing ones — an unknown project still returns exactly `{}`), and
+riding inside the **MCP** `overview` response (`playbook: {version, digest}`, a ninth key
+added only when `include_playbook=True`, which the MCP tool passes and the CLI and FastAPI
+endpoint do not — an unknown project still returns exactly `{}`), and
 `trackden onboard` printing a paste-ready snippet for the user's own `CLAUDE.md`/`AGENTS.md`
 — printed only, never written, proved by a recursive before/after snapshot of the whole
 scanned repo. B3 came last on purpose: its rules tell an agent to use `add_memory(kind=
@@ -362,7 +367,7 @@ SessionLog · Memory), `repository.py` (+ `get_history` continuity). `tools.py` 
 - [x] `onboard.py` — read-only repo scan, in priority order: `_tracker.md` · `main-plans/_tracker.md` · `_tickets-and-status/_tracker.md` · `**/_tracker.md` · `CLAUDE.md` · `AGENTS.md` (the last two seed `_way-of-work.md`, never treated as sources of truth)
 - [x] `run_onboard` orchestrator: identify → scan+gate → DB project → scaffold → summary; the review gate (y/n/edit, blank = import) only ever runs while a project is itemless, so re-onboarding can't duplicate items
 - [x] `trackden onboard` CLI: interactive wizard + flags (`--name --kind --client --repo --no-import --yes/-y`)
-- [x] pytest enters the repo for the first time (81 tests then; 354 now, after the guidance, Stage A, Stage B1, Stage B2 and Stage B3 branches added more); DB-marked tests auto-skip when Postgres is unreachable
+- [x] pytest enters the repo for the first time (81 tests then; 357 now, after the guidance, Stage A, Stage B1, Stage B2 and Stage B3 branches added more); DB-marked tests auto-skip when Postgres is unreachable
 - [ ] Deferred: launcher/alias so agents "call MCP first" without touching repos (needs its own design)
 - [ ] Deferred: agent-driven onboard exposed as an MCP tool (CLI-first for now)
 
@@ -416,8 +421,8 @@ provide, so writing them earlier would ship instructions that lie.
 - [x] Verified end-to-end against the real database (not just pytest): `remember --kind file --path <file> --item <id>` saves with the path absolute; `show --item <id>` shows only that item's logs/memory; a `parked` status (behaves as `waiting`) is counted by `status` but never offered as NEXT; a missing `--path` file saves with a warning; `--kind file` with no `--path` exits 1; the cross-project fix holds at the CLI
 
 ### Stage B3 — the playbook ✅ (shipped 2026-08-03)
-- [x] `playbook.py` — Trackden's own shipped, read-only rules, pure (no DB, no filesystem, no `app.*` imports): `VERSION = 1`, an eleven-rule `DIGEST` (1411 of a 1500-character budget — corrected from an earlier 1200 figure in the spec's draft, see the spec's "Corrections after B3 shipped"), and a seven-section `TEXT` — served by `get_playbook()`. One test asks the real MCP tool manager whether every tool the text names actually exists, so the playbook cannot drift from tools it instructs an agent to call
-- [x] The digest riding inside every `overview` response — a ninth key, `playbook: {version, digest}`, alongside all eight pre-existing keys; an unknown project still returns exactly `{}`
+- [x] `playbook.py` — Trackden's own shipped, read-only rules, pure (no DB, no filesystem, no `app.*` imports): `VERSION = 1`, an eleven-rule `DIGEST` (1521 of a 1700-character budget — the spec's draft said 1200, then 1500; both were too tight and the 1500 ceiling had already forced rule 11 to be golfed, losing the `Conflict:` framing its siblings share, so the ceiling moved to give a normal edit room. See the spec's "Corrections after B3 shipped"), and a seven-section `TEXT` — served by `get_playbook()`. One test asks the real MCP tool manager whether every tool the text names actually exists, so the playbook cannot drift from tools it instructs an agent to call
+- [x] The digest riding inside the **MCP** `overview` response — a ninth key, `playbook: {version, digest}`, added only when `include_playbook=True`. The MCP tool passes it; `trackden show` and the FastAPI endpoint do not, so the human-facing shape is unchanged and the web UI doesn't poll 1.5 KB of agent instructions. An unknown project still returns exactly `{}` either way
 - [x] MCP tool `get_playbook()` — takes no arguments, works before any project exists (tool count 16 → 17)
 - [x] `trackden playbook` CLI command — prints the full text, needs no project (command count 16 → 17)
 - [x] `trackden onboard` prints a paste-ready snippet for the user's own `CLAUDE.md`/`AGENTS.md` pointing at `overview()` and the playbook digest — **printed, never written**; a recursive, directory-safe before/after snapshot of every file in the scanned repo proves nothing changed

@@ -34,7 +34,8 @@ the rule that Trackden **remembers work and never decides it**.
 - `set_status` on every door (repository · MCP · CLI).
 - Write-side MCP tools: `add_item`, `add_folder`, `add_status`.
 - A shipped, read-only **playbook** — Trackden's own rules for using Trackden — reachable as
-  `get_playbook()`, with a short digest riding inside every `overview` response.
+  `get_playbook()`, with a short digest riding inside the agent-facing `overview` response
+  (see correction 4 below — it is opt-in, not on every door).
 - Item-scoped memory and logs, so a finding attaches to the bug it belongs to.
 - A `file` memory kind, so a local artifact (meeting recording, `findings.md`, an HTML
   output) can be pointed at without Trackden touching the disk.
@@ -167,7 +168,11 @@ than it is edited.
 
 ## The playbook
 
-### Digest — rides inside every `overview` response
+### Digest — as first drafted
+
+> The draft below is kept for history. What shipped differs in four ways — see "Corrections
+> after B3 shipped". In particular it rides inside the **agent-facing** `overview` only, not
+> every door, and the budget is 1700 rather than the 1200 stated here.
 
 ```
 TRACKDEN PLAYBOOK v1
@@ -206,11 +211,21 @@ things it got wrong, corrected here rather than silently rewritten:
    draft had nothing telling an agent to track work before starting it. The shipped digest
    adds this as rule 4: "Work not yet tracked? add_item() it before you start. Ask before
    inventing folders - the shape of the user's work is theirs, not yours."
-3. **The digest budget is 1500 characters, not 1200.** The Testing table below originally
-   asserted "stays under 1200 characters." The eleven shipped rules need 1411 characters
-   (verified: `len(playbook.DIGEST) == 1411`), so both `playbook.MAX_DIGEST` and
-   `test_playbook.py`'s assertion use 1500 — about 375 tokens landing inside every
-   `overview` call.
+3. **The digest budget is 1700 characters — this figure moved twice.** The Testing table
+   below originally asserted "stays under 1200 characters"; the eleven shipped rules needed
+   more, so it became 1500. That was still too tight: fixing an unrelated wording bug forced
+   rule 11 to be golfed for 36 characters, losing the `Conflict:` framing its ten siblings
+   share — a real quality loss caused by an arbitrary number. `MAX_DIGEST` is now **1700**
+   with the digest at **1521** (verified: `len(playbook.DIGEST) == 1521`), which leaves a
+   normal one-clause edit room instead of demanding character-shaving. The ceiling still
+   exists, so growth stays a deliberate choice.
+4. **The digest does NOT ride inside every `overview` response — only the agent's.** As first
+   shipped it was added inside `repository.overview`, which all three doors share, so
+   `GET /projects/{slug}` was sending ~1.5 KB of agent instructions on every web-UI poll,
+   inside the shape the Next.js frontend consumes. The signature is now
+   `overview(slug, include_playbook=False)`: the MCP tool passes `True`, and `trackden show`
+   and the FastAPI endpoint keep the original eight-key shape. Steering belongs at the agent
+   door. An unknown project still returns exactly `{}` either way.
 
 The shipped source of truth is `backend/app/playbook.py` — eleven rules in `DIGEST`, seven
 sections in `TEXT`. This section exists so the draft above stays legible as history instead
@@ -478,7 +493,7 @@ branch; these three were deliberately left, and this is the increment that touch
 | File | Kind | Covers |
 |---|---|---|
 | `test_statuses.py` | pure | class mapping · the four classes are closed · defaults resolve when a project has no rows · name validation |
-| `test_playbook.py` | pure | version present · **digest stays under 1500 characters** (corrected from the 1200 first stated here — see "Corrections after B3 shipped" above; it rides in *every* `overview`, so the budget is asserted, not hoped for) · all eleven rules present (corrected from ten, once creating-work and the unclassifiable-status rules were added) · text importable from the installed package |
+| `test_playbook.py` | pure | version present · **digest stays under 1700 characters** (1200 → 1500 → 1700; see "Corrections after B3 shipped" above for why the first two were too tight — it rides in the agent-facing `overview`, so the budget is asserted, not hoped for) · all eleven rules present (corrected from ten, once creating-work and the unclassifiable-status rules were added) · text importable from the installed package |
 | `test_set_status.py` | `@db` | real transitions · `unchanged` · `from`/`to` · unknown item |
 | `test_statuses_db.py` | `@db` | `add_status` · duplicate name · a custom name is then usable by `set_status` |
 | `test_open_semantics.py` | `@db` | **regression guard** — one item per class, then `whats_next` returns only `open`, skips `waiting`, counts it; `list_items` and `overview` agree |

@@ -110,7 +110,7 @@ restart so it loads). Your agent now has these tools:
 | `add_item` | create a new item — an agent can put work into the tracker itself |
 | `add_folder` | create a new (optionally nested) folder |
 | `add_status` | add a project-specific status name, with the behaviour class it follows |
-| `get_playbook` | Trackden's own rules for using Trackden — full text, version, no arguments, works before any project exists. A short digest already rides inside every `overview` response, so you get the reminder without a second call |
+| `get_playbook` | Trackden's own rules for using Trackden — full text, version, no arguments, works before any project exists. A short digest already rides inside the MCP `overview` response, so an agent gets the reminder without a second call |
 
 Tool count was 16 through the item-scoping work above — those parameters (`item_id`,
 `folder_id`, `path` on `add_memory`; `item_id` on `save_progress` and `get_history`) extend
