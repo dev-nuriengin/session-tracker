@@ -21,7 +21,8 @@ cd session-tracker
 docker compose up --build          # Postgres+pgvector + API on :8000
 ```
 
-First boot creates the vector extension, tables, and a small seed automatically.
+First boot creates the vector extension and the tables. It starts **empty** — Trackden
+invents nothing, so `trackden onboard` (next step) is the only way anything gets in.
 **No `.env` or API key required** — the core makes zero LLM calls.
 
 > ✅ Check it's alive: open http://localhost:8000/projects — you should see JSON.
