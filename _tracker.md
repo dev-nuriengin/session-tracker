@@ -93,8 +93,8 @@ on purpose rather than hidden, and a human notices it and fixes it. It also show
 in `waiting_items` (that stays a positive match on the waiting class only).
 
 **What still needs a human:** editing `_way-of-work.md` / `_arch.md` (no `update_guidance`
-tool yet — agents can read them, not write them) · removing a project (no `trackden delete`)
-· anything in "NEXT (optional / future)".
+tool yet — agents can read them, not write them) · removing a project (no `trackden delete`
+yet — **it is next, see "▸ NEXT"**) · anything in "NEXT (optional / future)".
 
 **Run it:** `docker compose up -d` · then `cd backend && uv run trackden …`. The core makes
 **zero LLM calls** — no API key needed. Only the optional brain (`eval`, `/graph`) uses one.
@@ -161,7 +161,36 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT — the `SessionStart` launcher.**
+**▸ NEXT — `trackden delete`, then the `SessionStart` launcher.**
+
+**Decided 2026-08-04: build `trackden delete` first.** It is the gap you hit soonest —
+onboard something by mistake and it is permanent short of `psql` — and it is the only
+supported way to clear the six fabricated projects that startup seeding created before
+`f4a08f5` removed it. Two things the implementation must get right, both learned the hard way
+during Stage B2:
+
+- **A plain `db.delete(project)` raises `ForeignKeyViolation`** once the project has
+  item-scoped memory or session logs, because no ORM relationship links `Memory`/`SessionLog`
+  to `Item`, so SQLAlchemy cannot order the cascade. Reproduced during B2's smoke run, not
+  theorised. The delete must, in ONE transaction: resolve the project → delete
+  `session_logs` (via `sessions.project_id`) → delete `memory` → `db.delete(project)` →
+  commit. Put it in `repository.delete_project()` and have `tests/conftest.py`'s
+  `_delete_project_cascading` call THAT, so one implementation exists instead of the
+  ordering living only as an executable spec in a test fixture.
+- **A supported delete removes most of the reason to write ad-hoc DB scripts**, which is the
+  hazard noted below: `conftest.py`'s `_test`/`_smoke` guard protects pytest runs only, and
+  during Stage B3 a manual `uv run python -c` check wrote a stray row into the real database.
+
+Two open product decisions, deliberately not settled yet:
+- **Does deleting a project delete its guidance files?** `~/.trackden/projects/<slug>/` holds
+  human-written `_way-of-work.md`, `_arch.md` and `_decisions.md` — and `_decisions.md` is
+  explicitly append-only, "never rewrite history". Leaning: drop the DB rows, KEEP the files,
+  and print where they are.
+- **Should agents be able to delete?** Every other write path is an MCP tool, but this is the
+  one operation with no undo. Leaning: CLI only, with a confirmation prompt and `--yes`, and
+  the playbook stating plainly that agents cannot delete.
+
+**Then — the `SessionStart` launcher.**
 
 Stage A unblocked the loop. Stage B1 shipped 2026-08-03: an agent can now create work itself
 — `add_item`, `add_folder`, the MCP `add_status` tool — instead of needing a human at the
