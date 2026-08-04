@@ -529,10 +529,10 @@ def delete(
             typer.echo("aborted — nothing was deleted")
             raise typer.Exit(1)
 
-    # `project_counts` above already confirmed the project exists, so its return
-    # shape isn't re-checked here — this is a local single-user tool with no
-    # concurrent deletion to race against.
-    repository.delete_project(project)
+    result = repository.delete_project(project)
+    if result["status"] != "deleted":
+        typer.echo(f"unknown project '{project}'")
+        raise typer.Exit(1)
 
     typer.echo(f"✓ deleted '{project}'")
     try:

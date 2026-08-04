@@ -384,7 +384,7 @@ def test_delete_shows_a_preview_and_asks_before_deleting(monkeypatch):
     )
     monkeypatch.setattr(
         cli_mod.repository, "delete_project",
-        lambda slug: called.setdefault("slug", slug) or {"status": "deleted", "removed": {}},
+        lambda slug: called.update(slug=slug) or {"status": "deleted", "removed": {}},
     )
     result = runner.invoke(cli_mod.app, ["delete", "acme"], input="y\n")
     assert result.exit_code == 0, result.output
@@ -453,3 +453,23 @@ def test_delete_says_the_guidance_files_were_kept(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert "_decisions.md" in result.output or str(guidance) in result.output
     assert guidance.exists(), "the CLI must not delete the guidance folder"
+
+
+def test_delete_survives_a_slug_workspace_rejects(monkeypatch):
+    """`project_dir` raises ValueError on an unsafe slug; delete must still succeed."""
+    _no_schema(monkeypatch)
+    def boom(slug, home=None):
+        raise ValueError(f"unsafe project slug: {slug!r}")
+    monkeypatch.setattr(cli_mod.workspace_mod, "project_dir", boom)
+    monkeypatch.setattr(
+        cli_mod.repository, "project_counts",
+        lambda slug: {"status": "counted", "items": 0, "folders": 0, "memory": 0,
+                      "sessions": 0, "logs": 0, "statuses": 0},
+    )
+    monkeypatch.setattr(
+        cli_mod.repository, "delete_project",
+        lambda slug: {"status": "deleted", "removed": {}},
+    )
+    result = runner.invoke(cli_mod.app, ["delete", "acme", "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "kept your guidance files" not in result.output
