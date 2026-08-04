@@ -87,6 +87,13 @@ def test_every_tool_the_text_names_actually_exists():
         assert manager.get_tool(name) is not None, f"playbook names a missing tool: {name}"
 
 
+def test_the_text_says_an_agent_cannot_delete():
+    """Delete is CLI-only on purpose — an agent that doesn't know will offer and fail."""
+    lowered = playbook.TEXT.lower()
+    assert "delete" in lowered
+    assert "cannot" in lowered or "no tool" in lowered
+
+
 def test_the_module_is_pure():
     """No DB, no filesystem, no app imports — same rule statuses.py follows."""
     import pathlib

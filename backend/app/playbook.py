@@ -164,6 +164,8 @@ Do not:
   it is worthless to the next session;
 - invent a folder structure without asking;
 - create, move or read a file the user did not ask you to;
+- offer to delete a project — there is no delete tool, so say so rather than promise it.
+  Removing a project is the user's own `trackden delete` command;
 - claim you saved something you did not;
 - treat Trackden as an approval step. It is memory.
 """
