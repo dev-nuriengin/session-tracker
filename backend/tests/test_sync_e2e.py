@@ -39,12 +39,17 @@ def test_the_mirror_stays_true_through_the_cli_door(home, temp_slug, tmp_path):
     assert result.exit_code == 0, result.output
     assert "- [x] new thing" in mirror.read_text(encoding="utf-8")
 
-    # add-folder does not — `groups` is built by iterating items, so a folder with
-    # no items renders nothing at all
+    # add-folder: NOT proof of no-refresh — `groups` (tracker_md.py) is built by
+    # iterating items, so a folder with no items renders nothing at all, and this
+    # byte-compare would pass identically whether or not `sync` ran. It only pins
+    # that rendering fact. The real wiring-absence proof, with a call-count spy,
+    # is `test_add_folder_does_not_refresh` in test_cli_sync.py.
     before = mirror.read_bytes()
     result = runner.invoke(cli_mod.app, ["add-folder", temp_slug, "Phase 1"])
     assert result.exit_code == 0, result.output
-    assert mirror.read_bytes() == before
+    assert mirror.read_bytes() == before, (
+        "an empty folder should render nothing in the mirror"
+    )
 
     # `trackden sync` is idempotent
     result = runner.invoke(cli_mod.app, ["sync", temp_slug])
