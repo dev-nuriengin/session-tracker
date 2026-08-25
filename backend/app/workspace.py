@@ -137,6 +137,24 @@ def scaffold_project(
     return written
 
 
+def write_mirror(slug: str, text: str, home: Path | None = None) -> Path:
+    """Write a project's generated `_tracker.md`, and nothing else. Returns the path.
+
+    Deliberately narrow. `scaffold_project` writes the mirror too — but it also
+    `mkdir`s the folder and tops up the three guidance templates on the way, so
+    calling it to refresh one derived file would silently invent a way-of-work, an
+    architecture and a decisions log for a project that was never onboarded.
+
+    Never creates the folder: a missing one raises `FileNotFoundError` (an
+    `OSError`), which is how `sync` learns the project is not scaffolded. The slug
+    is validated by `project_dir`, so this second writer is not a second way around
+    the "never write outside the workspace" promise.
+    """
+    path = project_dir(slug, home) / TRACKER_FILE
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def ensure_home_git(home: Path | None = None) -> bool:
     """Make the workspace a git repo so one push backs up all guidance.
 

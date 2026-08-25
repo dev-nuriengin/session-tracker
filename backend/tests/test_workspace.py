@@ -4,7 +4,13 @@ from unittest import mock
 
 import pytest
 
-from app.workspace import ensure_home_git, project_dir, scaffold_project, trackden_home
+from app.workspace import (
+    ensure_home_git,
+    project_dir,
+    scaffold_project,
+    trackden_home,
+    write_mirror,
+)
 
 
 def test_trackden_home_honours_the_env_override(home):
@@ -240,3 +246,50 @@ def test_append_decision_preserves_the_scaffolded_header(home):
     scaffold_project("p", name="P")
     text = append_decision("p", "d", "b", today=date(2026, 7, 29)).read_text()
     assert text.startswith("# Decisions — P")
+
+
+def test_write_mirror_writes_only_the_tracker_file(home):
+    directory = project_dir("my-proj")
+    directory.mkdir(parents=True)
+
+    path = write_mirror("my-proj", "# mirror\n")
+
+    assert path == directory / "_tracker.md"
+    assert path.read_text(encoding="utf-8") == "# mirror\n"
+    assert {p.name for p in directory.iterdir()} == {"_tracker.md"}
+
+
+def test_write_mirror_overwrites_an_existing_mirror(home):
+    directory = project_dir("my-proj")
+    directory.mkdir(parents=True)
+    (directory / "_tracker.md").write_text("old\n", encoding="utf-8")
+
+    write_mirror("my-proj", "new\n")
+
+    assert (directory / "_tracker.md").read_text(encoding="utf-8") == "new\n"
+
+
+def test_write_mirror_never_creates_the_project_folder(home):
+    """The whole difference from `scaffold_project`, asserted: a refresh must not
+    conjure a folder — and three guidance templates — for an un-onboarded project."""
+    with pytest.raises(OSError):
+        write_mirror("never-onboarded", "# mirror\n")
+
+    assert not project_dir("never-onboarded").exists()
+
+
+def test_write_mirror_leaves_guidance_files_untouched(home):
+    scaffold_project("my-proj", name="My Proj", tracker_md="# old\n")
+    way_of_work = project_dir("my-proj") / "_way-of-work.md"
+    before = way_of_work.read_bytes()
+
+    write_mirror("my-proj", "# new\n")
+
+    assert way_of_work.read_bytes() == before
+
+
+def test_write_mirror_rejects_an_unsafe_slug(home):
+    """The workspace owns the "never write outside ~/.trackden" promise; a second
+    writer must not be a second way around it."""
+    with pytest.raises(ValueError):
+        write_mirror("../escape", "# mirror\n")
