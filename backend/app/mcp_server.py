@@ -74,7 +74,10 @@ def set_status(project: str, item_id: int, status: str) -> dict:
     `status` tells you what happened: set · unchanged · unknown_status (with the
     `valid` list, so you can correct yourself) · unknown_item · unknown_project.
     `from` and `to` are always reported, so you can see if someone else moved it.
-    `mirror` reports whether the project's human-readable `_tracker.md` was refreshed."""
+    `mirror` reports whether the project's human-readable `_tracker.md` was refreshed:
+    synced · unknown_project · not_scaffolded · hand_edited · write_failed. You never
+    read that file, so on `write_failed` or `hand_edited` — the DB and the file now
+    disagree — mention it to the user once."""
     result = repository.set_status(project, item_id, status)
     # Only after a real move: `unchanged` means nothing in the DB moved, so nothing
     # in the mirror can have moved either.
@@ -122,7 +125,10 @@ def add_item(
     `status` in the RESULT is the outcome, not the item's state: added (with
     `item_id`) · unknown_folder · unknown_status (with the `valid` list, so you can
     correct yourself) · unknown_project.
-    `mirror` reports whether the project's human-readable `_tracker.md` was refreshed."""
+    `mirror` reports whether the project's human-readable `_tracker.md` was refreshed:
+    synced · unknown_project · not_scaffolded · hand_edited · write_failed. You never
+    read that file, so on `write_failed` or `hand_edited` — the DB and the file now
+    disagree — mention it to the user once."""
     result = repository.add_item(project, title, folder_id=folder_id, status=status)
     return _with_mirror(result, project) if result["status"] == "added" else result
 

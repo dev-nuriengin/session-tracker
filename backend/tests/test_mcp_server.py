@@ -426,6 +426,7 @@ def test_a_failed_refresh_cannot_lose_the_write(monkeypatch):
 
     assert result["status"] == "added"
     assert result["item_id"] == 7
+    assert result["mirror"] == "write_failed"
 
 
 def test_there_is_no_sync_mcp_tool():

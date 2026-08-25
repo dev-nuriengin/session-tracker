@@ -208,6 +208,56 @@ def test_a_failed_refresh_warns_but_keeps_exit_zero(monkeypatch):
     assert "trackden sync korpus" in result.output
 
 
+def test_a_not_scaffolded_refresh_is_a_single_quiet_line(monkeypatch):
+    """`add-project` creates a DB row with no scaffolding, so every write to that
+    project would hit this forever — the common case for an agent-only project,
+    not an error worth shouting about. One line, no "!" alarm, and no "run sync"
+    hint (re-running `sync` cannot fix a missing folder; `onboard` can, and
+    `sync.py`'s own message already says so)."""
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_item",
+        lambda *a, **k: {"status": "added", "item_id": 42},
+    )
+    _fake_sync(
+        monkeypatch,
+        {"korpus": {"status": "not_scaffolded",
+                    "message": "no guidance folder for 'korpus' yet — run "
+                    "`trackden onboard korpus` (safe to re-run) to scaffold it"}},
+    )
+
+    result = runner.invoke(cli_mod.app, ["add-item", "korpus", "ship sync"])
+
+    assert result.exit_code == 0, result.output
+    assert "item #42" in result.output
+    assert "mirror not refreshed" in result.output
+    assert "! mirror not refreshed" not in result.output
+    assert "trackden sync korpus" not in result.output
+
+
+def test_a_hand_edited_refresh_does_not_hint_at_sync(monkeypatch):
+    """Re-running `sync` on a hand-edited mirror refuses it again, identically —
+    nothing is "fixed" by that, so the hint must not appear for this outcome."""
+    _no_schema(monkeypatch)
+    monkeypatch.setattr(
+        cli_mod.repository, "add_item",
+        lambda *a, **k: {"status": "added", "item_id": 42},
+    )
+    _fake_sync(
+        monkeypatch,
+        {"korpus": {"status": "hand_edited",
+                    "message": "skipped: not a generated file, refusing to "
+                    "overwrite your edits"}},
+    )
+
+    result = runner.invoke(cli_mod.app, ["add-item", "korpus", "ship sync"])
+
+    assert result.exit_code == 0, result.output
+    assert "item #42" in result.output
+    assert "! mirror not refreshed" in result.output
+    assert "trackden sync korpus" not in result.output
+
+
 def test_a_refresh_that_raises_cannot_fail_the_command(monkeypatch):
     """`sync` promises never to raise; this asserts the door does not DEPEND on
     that promise for something as costly as swallowing a committed write."""

@@ -56,10 +56,31 @@ def sync(slug: str) -> dict:
     # rejects uppercase outright. Same choice `guidance.py` makes with `row.slug`,
     # and the same defect `trackden delete ACME` had before it normalised.
     canonical = project.slug
+    result["project"] = canonical
     mirror: Path | None = None
 
     try:
         directory = workspace.project_dir(canonical)
+    except ValueError:
+        # `project_dir` is the ONLY call below that can raise `ValueError`, and it
+        # does no I/O — it just validates the slug and joins paths. Giving it its
+        # own try means the `except ValueError` this raises can only ever mean one
+        # thing, instead of also catching a `ValueError` from somewhere else in the
+        # block below and mislabelling it with this message.
+        #
+        # The DB holds a slug `_SAFE_SLUG` rejects: `add-project` only lowercases
+        # and strips, it never validates. The spec's outcome set has no
+        # `invalid_slug`, so this is reported as `not_scaffolded` — but with an
+        # honest message, because telling someone to `onboard` a slug that cannot
+        # be a folder name would send them in a circle.
+        result["status"] = "not_scaffolded"
+        result["message"] = (
+            f"project slug {canonical!r} cannot be a workspace folder — a usable "
+            "slug is lowercase letters, digits, and hyphens only (e.g. 'my-project')"
+        )
+        return result
+
+    try:
         # `.exists()` sits INSIDE the try: on an over-long path *component* it
         # raises OSError itself, which a length check alone would not catch.
         if not directory.exists():
@@ -83,25 +104,16 @@ def sync(slug: str) -> dict:
         )
         written = workspace.write_mirror(canonical, text)
     except UnicodeDecodeError:
-        # MUST precede `except ValueError` — UnicodeDecodeError is a subclass of it,
-        # and Python takes the first matching clause. A mirror that is not valid
-        # UTF-8 certainly did not come from us, so it gets a hand-edited file's
-        # protection rather than being mislabelled `not_scaffolded`.
+        # MUST precede any `except ValueError` in this block — UnicodeDecodeError is
+        # a subclass of it, and Python takes the first matching clause. A mirror
+        # that is not valid UTF-8 certainly did not come from us, so it gets a
+        # hand-edited file's protection rather than being mislabelled
+        # `not_scaffolded`. (There is no `except ValueError` left in this block to
+        # race with — `project_dir`, above, is the only raiser, and it is already
+        # handled — but this clause still has to come first on principle.)
         result["status"] = "hand_edited"
         result["path"] = str(mirror) if mirror is not None else None
         result["message"] = _HAND_EDITED
-        return result
-    except ValueError:
-        # The DB holds a slug `_SAFE_SLUG` rejects: `add-project` only lowercases
-        # and strips, it never validates. The spec's outcome set has no
-        # `invalid_slug`, so this is reported as `not_scaffolded` — but with an
-        # honest message, because telling someone to `onboard` a slug that cannot
-        # be a folder name would send them in a circle.
-        result["status"] = "not_scaffolded"
-        result["message"] = (
-            f"project slug {canonical!r} cannot be a workspace folder — a usable "
-            "slug is lowercase letters, digits, and hyphens only (e.g. 'my-project')"
-        )
         return result
     except OSError as exc:
         result["status"] = "write_failed"

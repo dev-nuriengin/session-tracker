@@ -152,6 +152,28 @@ def test_an_unusable_stored_slug_is_reported_not_raised(home, fake_repo):
     assert "lowercase letters" in result["message"]
 
 
+def test_a_later_valueerror_does_not_wear_the_slug_guard_message(
+    home, fake_repo, monkeypatch
+):
+    """`workspace.project_dir` is the only call in `sync` that can raise
+    `ValueError`, and it now has its own dedicated `except`. Proving the narrowing
+    means showing the opposite: a `ValueError` raised by anything AFTER that call
+    must not come back labelled `not_scaffolded` with the "cannot be a workspace
+    folder" wording — that would send someone chasing a slug problem that was
+    never the actual cause. With no `except ValueError` left downstream, it must
+    propagate instead of being mislabelled."""
+    add_project(fake_repo, "acme", name="Acme", items=[item("ship it")])
+    scaffolded("acme")
+
+    def explode(slug):
+        raise ValueError("boom from somewhere else entirely")
+
+    monkeypatch.setattr(sync_mod.repository, "items_with_folders", explode)
+
+    with pytest.raises(ValueError, match="boom from somewhere else entirely"):
+        sync_mod.sync("acme")
+
+
 # ---- hand_edited ----
 
 def test_hand_edited_leaves_the_file_byte_identical(home, fake_repo):

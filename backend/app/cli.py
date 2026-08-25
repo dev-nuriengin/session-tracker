@@ -186,10 +186,24 @@ def _refresh_mirror(project: str) -> None:
         result = sync_mod.sync(slug)
     except Exception:  # noqa: BLE001 — see the docstring
         result = {"status": "write_failed", "message": "unexpected error"}
-    if result["status"] == "synced":
+    status = result["status"]
+    if status == "synced":
+        return
+    if status == "not_scaffolded":
+        # `add-project` creates a DB row with no scaffolding, so every write to
+        # that project hits this until someone runs `onboard` — the common case
+        # for an agent-only project, not an error worth shouting about (same
+        # reasoning the MCP door already applies to this outcome). One quiet
+        # line, and `sync.py`'s own message already says what to run.
+        typer.echo(f"  mirror not refreshed: {result['message']}")
         return
     typer.echo(f"! mirror not refreshed: {result['message']}")
-    typer.echo(f"  run `trackden sync {slug}` once that is fixed")
+    if status == "write_failed":
+        # `hand_edited`'s message already says the mirror was refused, on
+        # purpose, because it is hand-written — re-running `sync` would refuse
+        # it again identically, so a "run sync" hint here would send someone in
+        # a circle. Only `write_failed` is something re-running `sync` can fix.
+        typer.echo(f"  run `trackden sync {slug}` once that is fixed")
 
 
 @app.command("add-item")
