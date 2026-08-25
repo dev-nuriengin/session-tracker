@@ -66,6 +66,9 @@ def test_set_status_reports_the_move(monkeypatch):
         "set_status",
         lambda *a, **k: {"status": "set", "from": "todo", "to": "doing"},
     )
+    # The "set" branch now auto-refreshes the mirror — stub sync so this stays a
+    # pure-unit test (the file's own header contract), not a live Postgres query.
+    monkeypatch.setattr(cli_mod.sync_mod, "sync", lambda slug: {"status": "synced"})
     result = runner.invoke(cli_mod.app, ["set-status", "acme", "42", "doing"])
     assert result.exit_code == 0, result.output
     assert "todo → doing" in result.output
@@ -182,6 +185,9 @@ def test_add_item_reports_the_new_id(monkeypatch):
     monkeypatch.setattr(
         cli_mod.repository, "add_item", lambda *a, **k: {"status": "added", "item_id": 42}
     )
+    # The "added" branch now auto-refreshes the mirror — stub sync so this stays a
+    # pure-unit test (the file's own header contract), not a live Postgres query.
+    monkeypatch.setattr(cli_mod.sync_mod, "sync", lambda slug: {"status": "synced"})
     result = runner.invoke(cli_mod.app, ["add-item", "acme", "Fix it"])
     assert result.exit_code == 0, result.output
     assert "#42" in result.output
