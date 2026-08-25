@@ -207,7 +207,7 @@ gets read. See "This closes out Stage B" below.
 
 ### Session state, 2026-08-25 — read before assuming anything shipped
 
-Suite **425 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **19
+Suite **428 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **19
 commands** · MCP **17 tools** (`uv run trackden --help`; tool count is the `@mcp.tool()`
 occurrences in `mcp_server.py`) · `~/.trackden` does not exist · `session_tracker_db` healthy on
 :5433. Verified this session, not taken on trust.
