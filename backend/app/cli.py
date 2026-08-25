@@ -170,6 +170,28 @@ def add_folder(
     raise typer.Exit(1)
 
 
+def _refresh_mirror(project: str) -> None:
+    """Rewrite the project's generated `_tracker.md` after a successful DB write.
+
+    Warns and returns. It must never raise and never change the exit code: the DB
+    write already committed, so failing the command because a derived file could
+    not be rewritten would make a cosmetic problem look like lost work.
+
+    `sync` promises never to raise; the bare `except` is deliberate belt-and-braces,
+    because the cost of that promise being broken here is a user believing their
+    item was not saved.
+    """
+    slug = project.strip().lower()
+    try:
+        result = sync_mod.sync(slug)
+    except Exception:  # noqa: BLE001 — see the docstring
+        result = {"status": "write_failed", "message": "unexpected error"}
+    if result["status"] == "synced":
+        return
+    typer.echo(f"! mirror not refreshed: {result['message']}")
+    typer.echo(f"  run `trackden sync {slug}` once that is fixed")
+
+
 @app.command("add-item")
 def add_item(
     project: str,
@@ -182,6 +204,7 @@ def add_item(
     outcome = result["status"]
     if outcome == "added":
         typer.echo(f"✓ item #{result['item_id']} added to {project}")
+        _refresh_mirror(project)
         return
     if outcome == "unknown_status":
         typer.echo(f"unknown status '{status}'. valid: {', '.join(result['valid'])}")
@@ -201,6 +224,7 @@ def set_status(project: str, item_id: int, status: str):
     outcome = result["status"]
     if outcome == "set":
         typer.echo(f"✓ item #{item_id}: {result['from']} → {result['to']}")
+        _refresh_mirror(project)
         return
     if outcome == "unchanged":
         typer.echo(f"item #{item_id} is already '{result['to']}'")
