@@ -205,24 +205,22 @@ with no DB change between them write identical bytes.
 **▸ NEXT — the `SessionStart` launcher**, still the only mechanical guarantee any of this
 gets read. See "This closes out Stage B" below.
 
-### Session state, 2026-08-05 — read before assuming anything shipped
+### Session state, 2026-08-25 — read before assuming anything shipped
 
-Suite **425 passing** · DB empty (`trackden list` → "No projects yet") · `~/.trackden` does not
-exist · `session_tracker_db` healthy on :5433 · CLI 19 commands, MCP 17 tools. All verified this
-session, not taken on trust.
+Suite **425 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **19
+commands** · MCP **17 tools** (`uv run trackden --help`; tool count is the `@mcp.tool()`
+occurrences in `mcp_server.py`) · `~/.trackden` does not exist · `session_tracker_db` healthy on
+:5433. Verified this session, not taken on trust.
 
-**`main` is 8 commits ahead of `origin/main` at `f4a08f5`.** The 2026-08-05 handoff says
-`origin/main` is at `c74d5ed`; that is wrong by 3 commits — `c74d5ed` → `eba7d7e` → `90b9adb` →
-`f4a08f5`. The "8 ahead" count is right, the hash is not. Not re-verified against GitHub (a fetch
-writes refs).
+**`main` now matches `origin/main`** (both at `1df8332`) — the 8 commits this section used to
+flag as unpushed went out after 2026-08-05. This branch, `feat/trackden-sync`, is **11 commits
+ahead of `origin/main`** (`git rev-list --count origin/main..HEAD`), not yet merged.
 
-**Four things awaiting the owner's yes — nothing was committed or pushed:**
-1. Push the 8 commits on `main`.
-2. Commit `docs/superpowers/plans/2026-08-04-trackden-delete.md` (untracked; the other five plans
-   are committed — precedent `90b9adb` keeps plans as historical record).
-3. `_claude-files/HANDOFF-2026-08-05.md` — commit, or gitignore `_claude-files/`? The handoff's §2
-   says one file is untracked; there are **two**, because it omitted itself.
-4. Commit `docs/superpowers/specs/2026-08-05-trackden-sync-design.md` (written this session).
+**Two things still awaiting the owner's yes:**
+1. Commit `docs/superpowers/plans/2026-08-04-trackden-delete.md` (still untracked; the other
+   plans — including this branch's own `2026-08-25-trackden-sync.md` — are committed).
+2. `_claude-files/HANDOFF-2026-08-05.md` — commit, or gitignore `_claude-files/`? Still the only
+   file there, still untracked.
 
 **✅ DONE — `trackden delete` (shipped 2026-08-04).** The gap that made the tool feel
 unfinished: onboard something by mistake and it was permanent short of `psql`, and it was
@@ -541,6 +539,6 @@ shipped.
 - [x] Gate order, and it matters: `get_project()` FIRST (the only read that tells the truth about existence, and it carries the display name) → `project_dir()` exists → `is_generated()` → render → write. Steps 2–5 share one `try`, because `Path.exists()` itself raises `OSError` on an over-long path component
 - [x] `trackden sync [project]` — bare = all projects, following the `trackden eval` argument precedent (no `--all` flag). One line per project; exits non-zero if ANY project returned other than `synced`; slug normalised once at the top as `delete` does. Command count 18 → 19
 - [x] Auto-refresh at the doors, after a successful write only — CLI `add-item`/`set-status` (warn, exit 0) and MCP `add_item`/`set_status` (an additive `mirror` key in the outcome dict, the way `overview` gained `playbook`). No new MCP tool, so tool count stays 17
-- [x] Tests: one per outcome with a tmp `home`. `hand_edited` must assert the file's **bytes are unchanged**, and `unknown_project` must assert **no file was created** — a test that only checks the returned status passes against an implementation that returns the right string and clobbers the file anyway. Plus `synced` with zero items (an empty mirror is success), one `@pytest.mark.db` end-to-end proving auto-refresh is really wired to a door, and an assertion that `log` leaves a stale mirror byte-identical (proved with fakes, `test_log_does_not_refresh` in `test_cli_sync.py` — not the `@pytest.mark.db` end-to-end, because `add_session_log` calls `embed()`, which downloads an ONNX model on first use)
+- [x] Tests: one per outcome with a tmp `home`. `hand_edited` must assert the file's **bytes are unchanged**, and `unknown_project` must assert **no file was created** — a test that only checks the returned status passes against an implementation that returns the right string and clobbers the file anyway. Plus `synced` with zero items (an empty mirror is success), one `@pytest.mark.db` end-to-end proving auto-refresh is really wired to a door, and an assertion that `log` leaves the mirror untouched (proved with fakes, `test_log_does_not_refresh` in `test_cli_sync.py` — a call-count spy, not a byte comparison; not the `@pytest.mark.db` end-to-end, because `add_session_log` calls `embed()`, which downloads an ONNX model on first use)
 - [x] Idempotence: two `sync` runs with no DB change between them produce identical bytes, or the `~/.trackden` git repo that `ensure_home_git` maintains fills with spurious diffs
 - [x] No MCP `sync` tool, deliberately — an agent reads state via `overview`/`list_items`, which query the DB and are never stale; the mirror is a human-facing artifact
