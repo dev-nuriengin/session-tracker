@@ -14,6 +14,7 @@ from . import guidance as guidance_mod
 from . import onboard as onboard_mod
 from . import playbook as playbook_mod
 from . import repository
+from . import sync as sync_mod
 from . import workspace as workspace_mod
 from .db import init_db
 
@@ -578,6 +579,40 @@ def delete(
     if kept is not None and kept.exists():
         typer.echo(f"  kept your guidance files (way-of-work, arch, decisions): {kept}")
         typer.echo("  delete that folder yourself if you really want it gone")
+
+
+@app.command()
+def sync(project: str = typer.Argument(None, help="Project to sync (default: all)")):
+    """Rewrite a project's generated `_tracker.md` from the database (or every project).
+
+    The mirror under `~/.trackden/projects/<slug>/` is derived output, refreshed
+    automatically after the writes that change it. Run this to repair one that
+    drifted — after editing the DB by hand, or after a refresh failed.
+    """
+    # Normalise ONCE, here, exactly as `delete` does: `repository` lowercases
+    # internally but `workspace._SAFE_SLUG` rejects uppercase outright, so an
+    # un-normalised slug makes the two layers disagree about which project they
+    # are working on.
+    slugs = [project.strip().lower()] if project else repository.list_projects()
+    if not slugs:
+        typer.echo("No projects yet. Add one:  trackden add-project <slug>")
+        raise typer.Exit()
+
+    width = max(len(slug) for slug in slugs)
+    failed = False
+    for slug in slugs:
+        result = sync_mod.sync(slug)
+        if result["status"] == "synced":
+            typer.echo(f"✓ {slug:<{width}} — mirror written ({result['items']} items)")
+        else:
+            # Keep going: one bad project must not hide the ones that worked.
+            failed = True
+            typer.echo(f"! {slug:<{width}} — {result['message']}")
+
+    if failed:
+        # A partial success is still a failure for a scripted run, and Stage A
+        # settled that a write command reporting a failure must not exit 0.
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
