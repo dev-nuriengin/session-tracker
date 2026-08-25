@@ -197,9 +197,12 @@ def test_set_status_tool_delegates_to_the_repository(monkeypatch):
         return {"status": "set", "from": "todo", "to": "doing"}
 
     monkeypatch.setattr(mcp_server.repository, "set_status", fake)
+    # `status` here is "set", so `set_status` now also calls `sync.sync` — stub it
+    # so this wiring test stays DB-free like the rest of this file.
+    monkeypatch.setattr(mcp_server.sync, "sync", lambda slug: {"status": "synced"})
     result = mcp_server.set_status("acme", 42, "doing")
     assert seen == {"slug": "acme", "item_id": 42, "status": "doing"}
-    assert result == {"status": "set", "from": "todo", "to": "doing"}
+    assert result == {"status": "set", "from": "todo", "to": "doing", "mirror": "synced"}
 
 
 def test_set_status_passes_an_unknown_status_straight_through(monkeypatch):
@@ -244,9 +247,12 @@ def test_add_item_tool_delegates_with_every_argument(monkeypatch):
         return {"status": "added", "item_id": 42}
 
     monkeypatch.setattr(mcp_server.repository, "add_item", fake)
+    # `status` here is "added", so `add_item` now also calls `sync.sync` — stub it
+    # so this wiring test stays DB-free like the rest of this file.
+    monkeypatch.setattr(mcp_server.sync, "sync", lambda slug: {"status": "synced"})
     result = mcp_server.add_item("acme", "Fix it", folder_id=7, status="doing")
     assert seen == {"slug": "acme", "title": "Fix it", "folder_id": 7, "status": "doing"}
-    assert result == {"status": "added", "item_id": 42}
+    assert result == {"status": "added", "item_id": 42, "mirror": "synced"}
 
 
 def test_add_item_tool_passes_an_unknown_status_straight_through(monkeypatch):
@@ -318,3 +324,113 @@ def test_get_playbook_takes_no_arguments():
     import inspect
 
     assert not inspect.signature(mcp_server.get_playbook).parameters
+
+
+# ---- the generated mirror, refreshed at the agent door ----
+
+def test_add_item_reports_the_mirror_refresh(monkeypatch):
+    """Additive, like `overview`'s `playbook` key — the existing keys are untouched."""
+    monkeypatch.setattr(
+        mcp_server.repository, "add_item",
+        lambda *a, **k: {"status": "added", "item_id": 7},
+    )
+    monkeypatch.setattr(mcp_server.sync, "sync", lambda slug: {"status": "synced"})
+
+    result = mcp_server.add_item("acme", "ship sync")
+
+    assert result["status"] == "added"
+    assert result["item_id"] == 7
+    assert result["mirror"] == "synced"
+
+
+def test_add_item_reports_a_refresh_that_did_not_happen(monkeypatch):
+    """`not_scaffolded` is the common case for an agent-only project. Reported,
+    not shouted about — the write itself still succeeded."""
+    monkeypatch.setattr(
+        mcp_server.repository, "add_item",
+        lambda *a, **k: {"status": "added", "item_id": 7},
+    )
+    monkeypatch.setattr(
+        mcp_server.sync, "sync", lambda slug: {"status": "not_scaffolded"}
+    )
+
+    result = mcp_server.add_item("acme", "ship sync")
+
+    assert result["status"] == "added"
+    assert result["mirror"] == "not_scaffolded"
+
+
+def test_add_item_does_not_refresh_on_a_failed_write(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        mcp_server.repository, "add_item", lambda *a, **k: {"status": "unknown_project"}
+    )
+    monkeypatch.setattr(
+        mcp_server.sync, "sync",
+        lambda slug: calls.append(slug) or {"status": "synced"},
+    )
+
+    result = mcp_server.add_item("acme", "ship sync")
+
+    assert result["status"] == "unknown_project"
+    assert calls == []
+    assert "mirror" not in result
+
+
+def test_set_status_reports_the_mirror_refresh(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server.repository, "set_status",
+        lambda *a, **k: {"status": "set", "from": "todo", "to": "done"},
+    )
+    monkeypatch.setattr(mcp_server.sync, "sync", lambda slug: {"status": "synced"})
+
+    result = mcp_server.set_status("acme", 7, "done")
+
+    assert result["status"] == "set"
+    assert result["from"] == "todo"
+    assert result["to"] == "done"
+    assert result["mirror"] == "synced"
+
+
+def test_set_status_does_not_refresh_when_unchanged(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        mcp_server.repository, "set_status",
+        lambda *a, **k: {"status": "unchanged", "from": "done", "to": "done"},
+    )
+    monkeypatch.setattr(
+        mcp_server.sync, "sync",
+        lambda slug: calls.append(slug) or {"status": "synced"},
+    )
+
+    result = mcp_server.set_status("acme", 7, "done")
+
+    assert calls == []
+    assert "mirror" not in result
+
+
+def test_a_failed_refresh_cannot_lose_the_write(monkeypatch):
+    """The DB write committed. An exception escaping here would reach the agent as
+    an opaque tool error for work that actually succeeded."""
+    monkeypatch.setattr(
+        mcp_server.repository, "add_item",
+        lambda *a, **k: {"status": "added", "item_id": 7},
+    )
+
+    def explode(slug):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(mcp_server.sync, "sync", explode)
+
+    result = mcp_server.add_item("acme", "ship sync")
+
+    assert result["status"] == "added"
+    assert result["item_id"] == 7
+
+
+def test_there_is_no_sync_mcp_tool():
+    """The mirror is a human-facing artifact. Agents read state through `overview`
+    and `list_items`, which query the DB directly and are never stale — there is
+    nothing for an agent to gain by asking Trackden to rewrite a file it does not
+    read. The MCP surface stays 17 tools."""
+    assert mcp_server.mcp._tool_manager.get_tool("sync") is None

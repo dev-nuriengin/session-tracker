@@ -10,9 +10,28 @@ Wire into Claude Code via the repo's `.mcp.json`.
 
 from mcp.server.fastmcp import FastMCP
 
-from . import guidance, playbook, repository
+from . import guidance, playbook, repository, sync
 
 mcp = FastMCP("trackden")
+
+
+def _with_mirror(result: dict, project: str) -> dict:
+    """Refresh the generated `_tracker.md` and report the outcome as `mirror`.
+
+    Additive, exactly as `overview` gained `playbook`: no existing key changes name
+    or meaning, so nothing reading these tools today breaks. The value is the sync
+    outcome's status alone — an agent needs to know whether the human-facing file
+    was refreshed, not a path it never reads.
+
+    `sync` promises never to raise; the bare `except` is belt-and-braces, because
+    the cost of that promise breaking here is an agent seeing an opaque tool error
+    for a DB write that actually committed.
+    """
+    try:
+        mirror = sync.sync(project.strip().lower())["status"]
+    except Exception:  # noqa: BLE001 — see the docstring
+        mirror = "write_failed"
+    return {**result, "mirror": mirror}
 
 
 @mcp.tool()
@@ -54,8 +73,12 @@ def set_status(project: str, item_id: int, status: str) -> dict:
 
     `status` tells you what happened: set · unchanged · unknown_status (with the
     `valid` list, so you can correct yourself) · unknown_item · unknown_project.
-    `from` and `to` are always reported, so you can see if someone else moved it."""
-    return repository.set_status(project, item_id, status)
+    `from` and `to` are always reported, so you can see if someone else moved it.
+    `mirror` reports whether the project's human-readable `_tracker.md` was refreshed."""
+    result = repository.set_status(project, item_id, status)
+    # Only after a real move: `unchanged` means nothing in the DB moved, so nothing
+    # in the mirror can have moved either.
+    return _with_mirror(result, project) if result["status"] == "set" else result
 
 
 @mcp.tool()
@@ -98,8 +121,10 @@ def add_item(
 
     `status` in the RESULT is the outcome, not the item's state: added (with
     `item_id`) · unknown_folder · unknown_status (with the `valid` list, so you can
-    correct yourself) · unknown_project."""
-    return repository.add_item(project, title, folder_id=folder_id, status=status)
+    correct yourself) · unknown_project.
+    `mirror` reports whether the project's human-readable `_tracker.md` was refreshed."""
+    result = repository.add_item(project, title, folder_id=folder_id, status=status)
+    return _with_mirror(result, project) if result["status"] == "added" else result
 
 
 @mcp.tool()
