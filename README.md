@@ -72,7 +72,9 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
   files are not indexed by `search` yet. *(`trackden onboard` scaffolds the guidance-files
   layer to `~/.trackden`; guidance is readable over MCP via `get_guidance`, and decisions
   are recorded with `add_decision` — but `update_guidance` does not exist yet: editing the
-  rules or architecture themselves is still a human action on the file. Full spec:
+  rules or architecture themselves is still a human action on the file. The workspace's
+  `_tracker.md` is derived output, not a fourth store — the CLI and MCP doors keep it
+  current (`trackden sync` repairs it if it drifts). Full spec:
   `BUILD_NOTES.md`.)*
 - **MCP server** — the primary door; how agents consume the tracker in a standard way.
 - **CLI (`trackden`)** — the main human door: query projects/items, start/resume sessions,

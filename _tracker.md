@@ -24,6 +24,7 @@ plug into it over MCP so they know where everything stands without you re-explai
 | `trackden show <p> --item <id>` | The whole story of one item: its status, its memory (with file paths), its logs — narrowed to just that item. |
 | `trackden set-status <p> <item> <status>` · `add-status` · `statuses` | Move an item to a new status; add a project-specific status name; list what's valid. |
 | `trackden guidance <p> [--doc]` | Read a project's rules · architecture · decisions. |
+| `trackden sync [project]` | Rewrite a project's generated `_tracker.md` mirror from the DB — one project, or all of them. Runs automatically after `add-item` and `set-status`, so it is only needed to repair a mirror that drifted. Refuses a hand-edited file rather than overwriting it, and exits non-zero if any project could not be synced. |
 | `trackden playbook` | Print Trackden's own rules for using Trackden — the full text (seven sections). The short digest rides inside the **MCP** `overview` response, so agents get it without asking. Needs no project — works before any project exists. |
 | `trackden decide <p> "…" --because "…"` | Record a decision **and why**. Appends to `_decisions.md`. |
 | `trackden ask "…"` | Semantic search across every project's session logs. |
@@ -161,8 +162,67 @@ import) → DB project (+`repo_path`) → central `~/.trackden` scaffold → sum
 (8 tasks, TDD) that built it: `docs/superpowers/plans/2026-07-28-trackden-onboard.md`. See
 Phase 11 below for exactly what shipped and what's still deliberately deferred.
 
-**▸ NEXT — the `SessionStart` launcher.** It is the only thing left from the behaviour-layer
-spec — see "This closes out Stage B" below.
+**✅ DONE — `trackden sync` (shipped 2026-08-25).** Spec:
+`docs/superpowers/specs/2026-08-05-trackden-sync-design.md` (approved 2026-08-05). The mirror
+stops going stale: `render_tracker_md` had exactly one caller, `run_onboard` — it now has
+three, `run_onboard`, `sync.sync`, and through `sync` the two write paths at both doors.
+
+`workspace.write_mirror(slug, text, home=None)` writes `_tracker.md` and nothing else — never
+`mkdir`s the folder, never touches guidance. `sync.py`'s `sync(slug) -> dict` is the
+orchestrator, in the shape `guidance.py` established: a status vocabulary, never raises. Five
+outcomes — `synced` (+ `items`) · `unknown_project` · `not_scaffolded` · `hand_edited`
+(+ `path`) · `write_failed` (+ `reason`).
+
+**The trap the design was built around, and the gate order that avoids it.**
+`repository.items_with_folders(slug)` returns `[]` for an unknown project, and
+`repository.closed_names(slug)` falls back to the shipped defaults for one — neither read can
+tell "no such project" from "a project with zero items". Rendering straight from them would
+write a valid, empty mirror for `trackden sync typo-slug`. `repository.get_project` is the only
+read that tells the truth about existence, so it is the **first** gate in `sync`, ahead of the
+scaffolding check and the hand-edited check.
+
+`trackden sync [project]` — one project, or all of them (bare = all, no `--all` flag, following
+`trackden eval`'s argument precedent). Refuses a hand-edited mirror (the existing
+`is_generated()` banner check) rather than overwriting it, and exits non-zero if any project
+came back anything but `synced`. Prints "No projects yet" and exits 0 when there are none.
+CLI command count 18 → 19.
+
+**Auto-refresh is exactly two write paths, not six.** CLI `add-item`/`set-status` and MCP
+`add_item`/`set_status` call `sync` after a successful write. `add-folder` is excluded because
+`groups` is built by iterating items, so a folder with no items renders nothing; `add-status`
+because no existing item can hold a name that was just created; `log`/`remember` because
+neither appears in the mirror; `onboard` already writes it; `delete` is deliberately out of
+scope — the project is gone and its kept folder's mirror is left as last-known state. A refresh
+failure at the CLI warns and exits 0 — the DB write, the real work, already committed;
+`trackden sync` itself still exits non-zero on any non-`synced` project, and that asymmetry is
+intentional, not a bug. MCP `add_item`/`set_status` gain an additive `mirror` key carrying the
+sync status string — **no new MCP tool, tool count stays 17.**
+
+An `@pytest.mark.db` end-to-end suite proves the wiring against the real database and
+filesystem — the claim unit tests with fakes can't make — including that two `sync` runs
+with no DB change between them write identical bytes.
+
+**▸ NEXT — the `SessionStart` launcher**, still the only mechanical guarantee any of this
+gets read. See "This closes out Stage B" below.
+
+### Session state, 2026-08-05 — read before assuming anything shipped
+
+Suite **425 passing** · DB empty (`trackden list` → "No projects yet") · `~/.trackden` does not
+exist · `session_tracker_db` healthy on :5433 · CLI 19 commands, MCP 17 tools. All verified this
+session, not taken on trust.
+
+**`main` is 8 commits ahead of `origin/main` at `f4a08f5`.** The 2026-08-05 handoff says
+`origin/main` is at `c74d5ed`; that is wrong by 3 commits — `c74d5ed` → `eba7d7e` → `90b9adb` →
+`f4a08f5`. The "8 ahead" count is right, the hash is not. Not re-verified against GitHub (a fetch
+writes refs).
+
+**Four things awaiting the owner's yes — nothing was committed or pushed:**
+1. Push the 8 commits on `main`.
+2. Commit `docs/superpowers/plans/2026-08-04-trackden-delete.md` (untracked; the other five plans
+   are committed — precedent `90b9adb` keeps plans as historical record).
+3. `_claude-files/HANDOFF-2026-08-05.md` — commit, or gitignore `_claude-files/`? The handoff's §2
+   says one file is untracked; there are **two**, because it omitted itself.
+4. Commit `docs/superpowers/specs/2026-08-05-trackden-sync-design.md` (written this session).
 
 **✅ DONE — `trackden delete` (shipped 2026-08-04).** The gap that made the tool feel
 unfinished: onboard something by mistake and it was permanent short of `psql`, and it was
@@ -266,8 +326,10 @@ so a caller who supplies an item but not its folder gets no folder scoping for f
 
 ---
 
-**Status:** 67 / 74 — all phases 0–13 have shipped their Stage A, Stage B1, Stage B2 and
-Stage B3 core. **But "phases done" ≠ "usable day to day":** of the 7 open items, **none are
+**Status:** 67 / 83 — all phases 0–13 have shipped their Stage A, Stage B1, Stage B2 and
+Stage B3 core. (Was 67 / 74 until 2026-08-05, when Phase 14 `trackden sync` added its 9 boxes;
+nothing was completed or removed, so the done count is unchanged by design.) **But "phases
+done" ≠ "usable day to day":** of the 16 open items, **none are
 life-support blockers** — the one gap that used to stop daily use (`set_status`) shipped in
 Stage A, an agent can now create work itself, unprompted (Stage B1, 2026-08-03), a finding
 now attaches to the item it belongs to instead of just the whole project (Stage B2,
@@ -276,11 +338,16 @@ makes (Stage B3, 2026-08-03). **This is the whole behaviour-layer spec, done, ex
 thing: the `SessionStart` launcher is the only mechanical guarantee any of it gets read.**
 Do not read this line as "finished".
 
-- 🟡 **Phase 11 launcher/alias / `SessionStart` hook — the one real gap left.** Everything
-  shipped through Stage B3 steers an agent toward the rules (docstrings, the `overview`
-  digest, a version number); none of it *guarantees* an agent reads or acts on any of it.
-  A `SessionStart` hook running `trackden overview` automatically would be the guarantee.
-  Needs its own design (which shell, which agents, per-repo opt-in). See "▸ NEXT" above.
+- 🟡 **Phase 14 `trackden sync` — specced 2026-08-05, not built.** The mirror is written only
+  by `run_onboard`, so it is stale from the next write onward. Spec approved, implementation
+  plan not yet written, no code in `backend/` yet. See "▸ NEXT" above and Phase 14 below. It
+  sits *ahead* of the launcher because it needs no further design input.
+- 🟡 **Phase 11 launcher/alias / `SessionStart` hook — the one real gap left *in the
+  behaviour-layer spec*.** Everything shipped through Stage B3 steers an agent toward the
+  rules (docstrings, the `overview` digest, a version number); none of it *guarantees* an
+  agent reads or acts on any of it. A `SessionStart` hook running `trackden overview`
+  automatically would be the guarantee. Needs its own design (which shell, which agents,
+  per-repo opt-in). See "▸ NEXT" above.
 - 🟡 **Folder-scoped reads don't derive `folder_id` from `item_id`** — carried forward, see
   "Also open, carried forward" above.
 - Refinements, safe to leave: Phase 7 optional cloud store · Phase 8 hybrid search + rerank
@@ -459,3 +526,19 @@ before B2 shipped would have told an agent to call tools that didn't exist yet.
 `SessionStart` launcher/hook.** Every layer A/B1/B2/B3 shipped is steering — docstrings,
 a digest riding along for free, a version number — none of it is a mechanical guarantee.
 See "▸ NEXT" above.
+
+## Phase 14 — `trackden sync`: the mirror stops going stale 🟡 (specced 2026-08-05, NOT built)
+
+Spec: `docs/superpowers/specs/2026-08-05-trackden-sync-design.md` (approved 2026-08-05).
+**No code exists yet** — every box below is open, and the first of them is the implementation
+plan itself. Do not read the spec as a description of shipped behaviour.
+
+- [ ] Implementation plan in `docs/superpowers/plans/` (`superpowers:writing-plans`) — verify line numbers immediately before dispatch and locate by symbol name, per the handoff's §6.1
+- [ ] `workspace.write_mirror(slug, text, home=None)` — writes `_tracker.md` and nothing else; never `mkdir`s, never touches guidance. Deliberately NOT `scaffold_project`, which would also invent the three guidance templates
+- [ ] `sync.py` — `sync(slug)` orchestrator over `repository` + `workspace` + `tracker_md`, in the shape `guidance.py` established: a status vocabulary, never raises. Outcomes `synced` (with `items`, `path`) · `unknown_project` · `not_scaffolded` · `hand_edited` (with `path`) · `write_failed` (with `reason`)
+- [ ] Gate order, and it matters: `get_project()` FIRST (the only read that tells the truth about existence, and it carries the display name) → `project_dir()` exists → `is_generated()` → render → write. Steps 2–5 share one `try`, because `Path.exists()` itself raises `OSError` on an over-long path component
+- [ ] `trackden sync [project]` — bare = all projects, following the `trackden eval` argument precedent (no `--all` flag). One line per project; exits non-zero if ANY project returned other than `synced`; slug normalised once at the top as `delete` does. Command count 18 → 19
+- [ ] Auto-refresh at the doors, after a successful write only — CLI `add-item`/`set-status` (warn, exit 0) and MCP `add_item`/`set_status` (an additive `mirror` key in the outcome dict, the way `overview` gained `playbook`). No new MCP tool, so tool count stays 17
+- [ ] Tests: one per outcome with a tmp `home`. `hand_edited` must assert the file's **bytes are unchanged**, and `unknown_project` must assert **no file was created** — a test that only checks the returned status passes against an implementation that returns the right string and clobbers the file anyway. Plus `synced` with zero items (an empty mirror is success), one `@pytest.mark.db` end-to-end proving auto-refresh is really wired to a door, and an assertion that `log` leaves a stale mirror byte-identical
+- [ ] Idempotence: two `sync` runs with no DB change between them produce identical bytes, or the `~/.trackden` git repo that `ensure_home_git` maintains fills with spurious diffs
+- [ ] No MCP `sync` tool, deliberately — an agent reads state via `overview`/`list_items`, which query the DB and are never stale; the mirror is a human-facing artifact

@@ -82,7 +82,8 @@ there. Agents read them over MCP via `get_guidance` (one document per call: `way
 write that exists — there is **no `update_guidance`**: editing the rules or architecture
 themselves is still a human action on the file, not something an agent can do. Repos are
 never modified by Trackden. The `_tracker.md` in that folder is a **generated mirror** of
-the DB; do not hand-edit it.
+the DB; do not hand-edit it. It is refreshed automatically after the writes that change it
+(`add-item`, `set-status`), and `trackden sync` repairs one that has drifted.
 
 ## Run
 

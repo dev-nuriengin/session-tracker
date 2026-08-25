@@ -78,6 +78,10 @@ what it's about to remove and asks first (`--yes`/`-y` skips the prompt). Your g
 files in `~/.trackden/projects/<slug>/` are kept either way, and it tells you where.
 CLI only — there's no MCP tool for this, so an agent can't do it for you.
 
+The `_tracker.md` mirror rewrites itself after `add-item` and `set-status`, so you rarely
+need to think about it. `uv run trackden sync [project]` repairs one that drifted anyway —
+if a refresh ever failed, or you edited the database by hand.
+
 ## 3 · Connect your agent — the heart (2 min)
 
 This is the point of the product: your agent plugs into the tracker over **MCP** and gets
