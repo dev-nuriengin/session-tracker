@@ -3,28 +3,48 @@ name = "trackden-backend"
 version = "0.1.0"
 description = "Trackden API"
 requires-python = ">=3.12"
+# The base install is the product: the CLI and the MCP server, talking to Postgres.
+# Everything heavy is an extra, because none of it is needed to track work — half of a
+# full install was one optional feature's ONNX runtime, and a 250 MB download is a poor
+# first impression for a tool whose core makes zero LLM calls.
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "anthropic>=0.69",
     "python-dotenv>=1.0",
+    "sqlalchemy>=2.0.51",
+    "psycopg[binary]>=3.3.4",
+    "pgvector>=0.5.0",
+    "mcp>=1.28.1",
+    "typer>=0.27.0",
+]
+
+[project.optional-dependencies]
+# Local semantic search (`trackden ask`, MCP `search`). fastembed pulls onnxruntime,
+# numpy, tokenizers and Pillow — by itself larger than everything else combined.
+# Without it, logs are still saved; they are stored with a NULL embedding and skipped
+# by search, which `search_logs` already filtered for.
+search = ["fastembed>=0.8.0"]
+# The optional summariser: `trackden eval` and the LangGraph `/graph` endpoint. The only
+# part of Trackden that calls an LLM, and the only part that wants an API key.
+brain = [
+    "anthropic>=0.69",
     "langgraph>=1.2.9",
     "langchain>=1.3.14",
     "langchain-anthropic>=1.4.8",
-    "sqlalchemy>=2.0.51",
-    "psycopg[binary]>=3.3.4",
-    "mcp>=1.28.1",
-    "typer>=0.27.0",
-    "fastembed>=0.8.0",
-    "pgvector>=0.5.0",
     "langfuse>=4.14.0",
 ]
+# The local read-only web view's API server.
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30"]
+all = ["trackden-backend[search,brain,web]"]
 
 [project.scripts]
 trackden = "app.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8.3"]
+# Development installs everything: the suite covers the optional features too, so a
+# `uv run pytest` that silently skipped them would be worse than useless.
+dev = [
+    "pytest>=8.3",
+    "trackden-backend[search,brain,web]",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

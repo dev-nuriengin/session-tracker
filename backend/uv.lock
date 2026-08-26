@@ -2004,6 +2004,16 @@ name = "trackden-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "mcp" },
+    { name = "pgvector" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "python-dotenv" },
+    { name = "sqlalchemy" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+all = [
     { name = "anthropic" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -2011,40 +2021,54 @@ dependencies = [
     { name = "langchain-anthropic" },
     { name = "langfuse" },
     { name = "langgraph" },
-    { name = "mcp" },
-    { name = "pgvector" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "python-dotenv" },
-    { name = "sqlalchemy" },
-    { name = "typer" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+brain = [
+    { name = "anthropic" },
+    { name = "langchain" },
+    { name = "langchain-anthropic" },
+    { name = "langfuse" },
+    { name = "langgraph" },
+]
+search = [
+    { name = "fastembed" },
+]
+web = [
+    { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "trackden-backend", extra = ["brain", "search", "web"] },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.69" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "fastembed", specifier = ">=0.8.0" },
-    { name = "langchain", specifier = ">=1.3.14" },
-    { name = "langchain-anthropic", specifier = ">=1.4.8" },
-    { name = "langfuse", specifier = ">=4.14.0" },
-    { name = "langgraph", specifier = ">=1.2.9" },
+    { name = "anthropic", marker = "extra == 'brain'", specifier = ">=0.69" },
+    { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115" },
+    { name = "fastembed", marker = "extra == 'search'", specifier = ">=0.8.0" },
+    { name = "langchain", marker = "extra == 'brain'", specifier = ">=1.3.14" },
+    { name = "langchain-anthropic", marker = "extra == 'brain'", specifier = ">=1.4.8" },
+    { name = "langfuse", marker = "extra == 'brain'", specifier = ">=4.14.0" },
+    { name = "langgraph", marker = "extra == 'brain'", specifier = ">=1.2.9" },
     { name = "mcp", specifier = ">=1.28.1" },
     { name = "pgvector", specifier = ">=0.5.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "sqlalchemy", specifier = ">=2.0.51" },
+    { name = "trackden-backend", extras = ["search", "brain", "web"], marker = "extra == 'all'" },
     { name = "typer", specifier = ">=0.27.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.30" },
 ]
+provides-extras = ["search", "brain", "web", "all"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.3" }]
+dev = [
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "trackden-backend", extras = ["search", "brain", "web"] },
+]
 
 [[package]]
 name = "typer"

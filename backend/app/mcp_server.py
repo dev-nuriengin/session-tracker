@@ -10,7 +10,7 @@ Wire into Claude Code via the repo's `.mcp.json`.
 
 from mcp.server.fastmcp import FastMCP
 
-from . import guidance, playbook, repository, sync
+from . import embeddings, guidance, playbook, repository, sync
 
 mcp = FastMCP("trackden")
 
@@ -211,7 +211,13 @@ def get_history(project: str, limit: int = 10, item_id: int | None = None) -> di
 @mcp.tool()
 def search(query: str, limit: int = 5) -> list[dict]:
     """Semantic search across ALL projects' session logs (RAG). Use this to answer
-    "have I done/seen X before?" across your whole history, not just one project."""
+    "have I done/seen X before?" across your whole history, not just one project.
+
+    Semantic search is an optional install. If it is missing you get a single entry
+    carrying `unavailable` and a `message` — that is NOT "nothing found", and you must
+    not tell the user their history is empty. Relay the message instead."""
+    if not embeddings.available():
+        return [{"unavailable": True, "message": embeddings.INSTALL_HINT}]
     return repository.search_logs(query, limit=limit)
 
 

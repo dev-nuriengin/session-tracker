@@ -753,6 +753,11 @@ def search_logs(query: str, limit: int = 5) -> list[dict]:
     Each hit carries `item_id` (None for a project-level log) so a hit can be
     followed into `get_history(item_id=...)` for that item's whole story."""
     qv = embed(query)
+    if qv is None:
+        # The `search` extra is not installed. Both doors check `embeddings.available()`
+        # first and say so; this is the backstop, so a direct caller gets an empty list
+        # rather than a SQL error about comparing against NULL.
+        return []
     with SessionLocal() as db:
         rows = db.execute(
             select(
