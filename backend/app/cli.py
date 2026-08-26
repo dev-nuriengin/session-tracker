@@ -10,10 +10,12 @@ from pathlib import Path
 
 import typer
 
+from . import embeddings
 from . import guidance as guidance_mod
 from . import onboard as onboard_mod
 from . import playbook as playbook_mod
 from . import repository
+from . import setup as setup_mod
 from . import sync as sync_mod
 from . import workspace as workspace_mod
 from .db import init_db
@@ -25,8 +27,12 @@ app = typer.Typer(
 
 
 @app.callback()
-def _ensure_schema() -> None:
+def _ensure_schema(ctx: typer.Context) -> None:
     """Run before every command: make sure the schema exists.
+
+    Except `setup`, which is the command whose whole job is to bring a machine from
+    nothing to working. On a fresh install there is no database to reach yet, so
+    running this first would traceback out of the one command that exists to fix that.
 
     `cli.py` never called `init_db()` before — only `repository.setup()` did (from
     FastAPI startup / the MCP server's `__main__`), which `cli.py` calls neither.
@@ -39,6 +45,8 @@ def _ensure_schema() -> None:
     also seeded six stub projects into whatever database it found; that seeding is
     gone, so the two are equivalent now and either would be safe here.
     """
+    if ctx.invoked_subcommand == "setup":
+        return
     init_db()
 
 
@@ -350,6 +358,12 @@ def eval_cmd(project: str = typer.Argument(None, help="Project to eval (default:
 @app.command()
 def ask(query: str, limit: int = typer.Option(5, help="Max results")):
     """Semantic search across ALL projects' session logs (RAG)."""
+    # Distinguish "nothing matched" from "search is not installed". Without this the
+    # second case prints the first case's message, and the user concludes they never
+    # did the thing they are asking about.
+    if not embeddings.available():
+        typer.echo(embeddings.INSTALL_HINT)
+        raise typer.Exit(1)
     hits = repository.search_logs(query, limit=limit)
     if not hits:
         typer.echo("No matches (no embedded logs yet?).")
@@ -651,6 +665,85 @@ def sync(project: str = typer.Argument(None, help="Project to sync (default: all
         # A partial success is still a failure for a scripted run, and Stage A
         # settled that a write command reporting a failure must not exit 0.
         raise typer.Exit(1)
+
+
+_STEP_LABELS = {
+    "docker": "docker",
+    "database": "database",
+    "schema": "schema",
+    "mcp": "agents",
+}
+
+_GOOD = {"ok", "ready", "already_running", "created", "started", "registered"}
+
+
+@app.command()
+def setup(
+    check: bool = typer.Option(False, "--check", help="Diagnose only — change nothing"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
+):
+    """Get this machine ready: start the database, create the schema, tell your agents.
+
+    Safe to re-run — every step is idempotent, and an existing database is started
+    rather than replaced.
+    """
+    typer.echo("Trackden setup\n")
+
+    agents = None
+    if not check:
+        # Show every file we intend to touch BEFORE touching it. These are the user's
+        # own agent configs, not ours: writing into one unannounced is not a thing a
+        # setup command gets to do, however convenient.
+        detected = setup_mod.detect_agents()
+        if detected and not yes:
+            typer.echo("Found these agents, and will add Trackden to each:")
+            for agent in detected:
+                where = agent["config"] or "its own config (via its CLI)"
+                typer.echo(f"  · {agent['label']} — {where}")
+            typer.echo("  Existing entries are kept, and each file is backed up first.")
+            if not typer.confirm("Register with them?", default=True):
+                typer.echo("  skipped — the config block is printed at the end\n")
+                agents = []
+        if agents is None:
+            agents = detected
+
+    result = setup_mod.setup(check_only=check, agents=agents)
+
+    for step in result["steps"]:
+        mark = "✓" if step["status"] in _GOOD else ("·" if step["status"] == "skipped" else "✗")
+        label = _STEP_LABELS[step["name"]]
+        detail = step.get("message") or step["status"].replace("_", " ")
+        if step["name"] == "mcp" and step.get("agents"):
+            names = ", ".join(
+                a["agent"] for a in step["agents"] if a["status"] == "registered"
+            )
+            failed = [a for a in step["agents"] if a["status"] != "registered"]
+            detail = names or "none"
+            typer.echo(f"  {mark} {label:<10} {detail}")
+            for bad in failed:
+                typer.echo(f"    ! {bad['agent']}: {bad['message']}")
+            continue
+        typer.echo(f"  {mark} {label:<10} {detail}")
+
+    registered_any = any(
+        step["name"] == "mcp" and any(a["status"] == "registered" for a in step.get("agents", []))
+        for step in result["steps"]
+    )
+    if not registered_any:
+        typer.echo(
+            "\nAdd this to your agent's MCP config "
+            "(Codex: ~/.codex/config.toml · Cursor: ~/.cursor/mcp.json · "
+            "others: see their MCP docs):\n"
+        )
+        typer.echo(result["snippet"])
+
+    if result["ok"]:
+        typer.echo("\nReady. Next:  trackden onboard")
+        return
+    if check:
+        typer.echo("\nRe-run without --check to fix what's missing.")
+        return
+    raise typer.Exit(1)
 
 
 if __name__ == "__main__":
