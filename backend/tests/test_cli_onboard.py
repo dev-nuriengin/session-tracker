@@ -3,6 +3,7 @@ from typer.testing import CliRunner
 
 from app import cli as cli_mod
 from app import onboard as onboard_mod
+from app import statuses
 from app.cli import app
 
 runner = CliRunner()
@@ -50,6 +51,14 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(onboard_mod.repository, "import_items", import_items)
     monkeypatch.setattr(
         onboard_mod.repository, "items_with_folders", lambda slug: list(state["items"])
+    )
+    # `run_onboard` gained this call when the status vocabulary shipped, and this
+    # fixture was never updated — so every test here silently reached a real Postgres,
+    # despite the note above promising it stays Postgres-free. Delegates to the real
+    # vocabulary rather than hardcoding {"done"}, so it cannot drift from the defaults.
+    monkeypatch.setattr(
+        onboard_mod.repository, "closed_names",
+        lambda slug: statuses.names_in(statuses.CLOSED),
     )
     return state
 

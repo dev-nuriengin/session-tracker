@@ -1,5 +1,6 @@
 import pytest
 
+from app import statuses
 from app.onboard import scan_repo, slugify
 
 
@@ -162,11 +163,20 @@ def fake_db(monkeypatch):
     def items_with_folders(slug):
         return list(state["items"]) if slug in state["projects"] else []
 
+    def closed_names(slug):
+        # Delegates to the real vocabulary rather than hardcoding {"done"}: if the
+        # shipped defaults ever change, this fake follows instead of drifting.
+        return statuses.names_in(statuses.CLOSED)
+
     for name, func in [
         ("create_project", create_project),
         ("set_repo_path", set_repo_path),
         ("import_items", import_items),
         ("items_with_folders", items_with_folders),
+        # `run_onboard` gained this call when the status vocabulary shipped, and this
+        # fixture was never updated — so every test here silently reached a real
+        # Postgres, in a file whose own docstring promises it does not.
+        ("closed_names", closed_names),
     ]:
         monkeypatch.setattr(onboard_mod.repository, name, func)
     return state

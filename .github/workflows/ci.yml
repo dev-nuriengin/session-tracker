@@ -44,3 +44,15 @@ jobs:
       - name: Run the suite
         working-directory: backend
         run: uv run pytest -q
+
+      # The unit half of the suite promises, in its own files' docstrings, that it
+      # never touches Postgres. That promise drifted twice unnoticed: a fixture stubs
+      # four repository reads, production later grows a fifth call, and the tests keep
+      # passing — against a real database — because one is reachable. Pointing them at
+      # a database that does not exist makes any such reach fail loudly. It costs a
+      # couple of seconds and it is the only thing that catches this class at all.
+      - name: Unit tests must not touch Postgres
+        working-directory: backend
+        env:
+          TRACKDEN_TEST_DATABASE_URL: postgresql+psycopg://session:session@localhost:9999/nowhere_test
+        run: uv run pytest -q -m "not db"
