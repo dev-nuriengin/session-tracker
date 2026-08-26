@@ -273,7 +273,32 @@ feature, or if steering is observed failing often enough in real use to be worth
 Claude-only guarantee.
 
 **▸ NEXT — use it.** The product is built and nothing is queued to build. The database is
-empty: every one of the 466 tests is a test, not a user. Onboard two or three real projects,
+empty: every one of the 466 tests is a test, not a user.
+
+**Owner's machine, verified 2026-08-26 — what is and is not set up:**
+
+| | |
+|---|---|
+| `trackden` on PATH | ✅ `uv tool install .`, base only (72 MB) — no `[search]`, so `ask` reports itself unavailable rather than failing |
+| `session_tracker_db` | ✅ up and healthy on :5433 |
+| Schema | ✅ exists |
+| MCP registered for the owner's agents | ❌ **not done** — `trackden setup` has only been run as `--check`. Until it is, agents see Trackden only inside this repo (the shipped `.mcp.json` is relative), not from any other project |
+| Projects onboarded | ❌ **zero.** `~/.trackden` does not exist yet |
+
+**Decided 2026-08-26 — the old hand-maintained trackers and Trackden run in PARALLEL. No
+cutover.** Onboarding is purely additive and there is nothing to lose by doing both:
+`onboard` reads an existing `_tracker.md` and copies items into the DB; the file itself is
+never written to, and guidance is scaffolded to `~/.trackden`, never into the repo (proved
+by a recursive before/after snapshot of every file in a scanned repo).
+
+The honest cost of running both: **they drift.** The hand-maintained file and the DB are
+separate stores — ticking a box in one does not tick the other. That is exactly the cost
+dogfooding removes, which is why it is the item after this one.
+
+Plan the owner set: onboard one project (the one touched most often), keep the existing
+alias and files exactly as they are, compare after a week, and retire the old path only if
+Trackden is obviously winning. A bad onboard is undone with `trackden delete <project>`,
+which keeps guidance files and never touched the repo to begin with. Onboard two or three real projects,
 work for a week, and the gaps will name themselves — a wizard prompt that reads badly, a
 status name the vocabulary is missing, an import that guesses wrong on a messy repo. More
 building before that is guessing.
