@@ -272,10 +272,31 @@ complexity.
 feature, or if steering is observed failing often enough in real use to be worth a
 Claude-only guarantee.
 
-**▸ NEXT** — nothing is queued. See "This closes out Stage B" below for what Stage B still
-owes; `update_guidance` (agents can read guidance, not write it) and dogfooding (this file
-is still hand-maintained, so Trackden does not yet track itself) are the two largest
-remaining gaps.
+**▸ NEXT — use it.** The product is built and nothing is queued to build. The database is
+empty: every one of the 466 tests is a test, not a user. Onboard two or three real projects,
+work for a week, and the gaps will name themselves — a wizard prompt that reads badly, a
+status name the vocabulary is missing, an import that guesses wrong on a messy repo. More
+building before that is guessing.
+
+**Gap found while answering "can I see what's going on?" (2026-08-26): there is no
+application logging at all.** `grep -rn "import logging" app/` returns nothing. What exists:
+`observability.py` (optional Langfuse, and only for the LangChain brain, which is an extra),
+and session logs — but those are a *product feature* (what you chose to record), not a
+diagnostic trail. Two consequences worth knowing before relying on it:
+
+- When something fails, you get an outcome dict or a traceback. No log file, no `--verbose`,
+  nothing to send anyone.
+- **No audit of what an agent did over MCP.** The server runs as a subprocess the user never
+  sees. `save_progress` records what an agent chose to write down; nothing records which
+  tools it called or what it changed. For a memory product where agents write to a human's
+  data, that is a real hole — the user cannot answer "what did it just do to my project?"
+
+Not urgent enough to build before first use, but it is the thing most likely to be wanted
+the first time something behaves oddly.
+
+**▸ AFTER THAT — dogfooding.** This file is still hand-maintained, so Trackden does not track
+Trackden, which was the original stated goal. `update_guidance` (agents can read guidance but
+not write it) is the other large gap.
 
 ### Session state, 2026-08-26 — read before assuming anything shipped
 
