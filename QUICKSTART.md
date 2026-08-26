@@ -143,7 +143,38 @@ existing tools rather than adding new ones. `get_playbook` is the one genuinely 
 > 💡 Try it: ask your agent *"what's the history of my-first-project?"* — it calls
 > `get_history` and answers from the tracker, not from guesswork.
 
-## 4 · See your status (optional)
+## 4 · Start a session in one word (recommended)
+
+Your agent now *can* read Trackden. Nothing yet *makes* it — the tool descriptions and
+the playbook digest steer it, and that works most of the time. When it doesn't, the agent
+answers from guesswork and you have no obvious sign it skipped the check.
+
+The fix is a shell function per project. Add one to `~/.zshrc` (or `~/.bashrc`):
+
+```zsh
+myproject() {
+  cd ~/code/myproject
+  trackden show myproject
+  claude "Call trackden overview for 'myproject' first, then tell me where we left off."
+}
+```
+
+Now typing `myproject` puts you in the right folder, shows you the status, and starts your
+agent already pointed at the history.
+
+**It works with any agent** — swap `claude` for `codex`, `cursor`, or whatever you run. The
+last line is just a first prompt.
+
+Why a shell function and not a built-in hook: session-start hooks are vendor-specific.
+Claude Code has one, most tools don't, and a "guarantee" that works for a single vendor
+would cut against the whole point of talking MCP. A shell function is the one mechanism
+every tool shares.
+
+**The honest limit:** this only fires when you use it. Open an agent directly in the folder
+and you're back to steering. In practice you type the command to start work anyway, which
+is most of the benefit for none of the complexity.
+
+## 5 · See your status (optional)
 
 - **CLI:** `trackden show my-first-project` · `trackden ask "what did I do last?"`
 - **Web view:** run `cd frontend && npm run dev` → http://localhost:3000

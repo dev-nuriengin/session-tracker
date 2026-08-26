@@ -248,8 +248,34 @@ changes nothing: no container touched, no config written. No MCP tool — regist
 agent's own config is a local-machine action a human runs once, not something an agent calls
 over MCP; MCP tool count stays 17.
 
-**▸ NEXT — the `SessionStart` launcher**, still the only mechanical guarantee any of this
-gets read. See "This closes out Stage B" below.
+**✅ DECIDED, 2026-08-26 — the `SessionStart` launcher is NOT being built. Documented a
+shell function instead.** The gap it was meant to close is real: agents are steered toward
+`overview` (tool descriptions, the playbook digest riding inside the response) but nothing
+makes them call it, and a skipped check looks exactly like a confident answer.
+
+Why the hook lost anyway: **MCP is a standard, session hooks are not.** Claude Code has a
+`SessionStart` hook; Codex and Cursor have no equivalent. Building it would mean the
+project's one mechanical guarantee exists for a single vendor — in a product whose first
+principle is that no vendor is privileged. That is a worse outcome than the gap.
+
+What shipped instead: QUICKSTART §4 and a README section documenting a per-project shell
+function — `cd`, `trackden show <project>`, then start whatever agent you use with a first
+prompt pointing at `overview`. Works with every tool, because a shell is the one thing they
+all share. Costs no code and no second path to keep true.
+
+Its honest limit, stated in the docs rather than hidden: it only fires when the user types
+it. Opening an agent directly in the folder falls back to today's steering. In practice you
+type something to start work anyway, so this is most of the benefit for none of the
+complexity.
+
+**Reopen this if** a session-hook mechanism becomes something more than one vendor's
+feature, or if steering is observed failing often enough in real use to be worth a
+Claude-only guarantee.
+
+**▸ NEXT** — nothing is queued. See "This closes out Stage B" below for what Stage B still
+owes; `update_guidance` (agents can read guidance, not write it) and dogfooding (this file
+is still hand-maintained, so Trackden does not yet track itself) are the two largest
+remaining gaps.
 
 ### Session state, 2026-08-26 — read before assuming anything shipped
 

@@ -205,6 +205,23 @@ cd frontend && npm run dev                                 # web view → :3000
 **Optional (off by default, opt-in):** Langfuse tracing (`LANGFUSE_*` env vars) · a cloud
 store/UI + auth — only if you enable them. By default everything stays local & private.
 
+## Starting a session
+
+Agents read Trackden over MCP, but nothing forces them to check it first. The simplest
+reliable habit is a shell function per project:
+
+```zsh
+myproject() {
+  cd ~/code/myproject
+  trackden show myproject
+  claude "Call trackden overview for 'myproject' first, then tell me where we left off."
+}
+```
+
+Works with any agent — swap `claude` for whatever you run. Session-start hooks would make
+this automatic, but they are vendor-specific; a shell function is the one mechanism every
+tool shares. See [`QUICKSTART.md`](./QUICKSTART.md) for the details.
+
 ## For AI agents / contributors
 
 Read [`AGENTS.md`](./AGENTS.md) for how to work in this repo, and
