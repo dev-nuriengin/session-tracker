@@ -14,9 +14,56 @@ are, and what happened in each work session** — and exposes that to AI agents 
 **standard way** so they can read status and save progress *while they work*, with no
 per-agent configuration.
 
-It turns a manual way-of-working (a `_tracker.md` per project, read at the start of a
-session and ticked at the end — see this repo's own [`_tracker.md`](./_tracker.md) as a
-**living example**) into a real product.
+Most teams already do a version of this by hand — a checklist file per project, read at
+the start of a session and ticked at the end. That works until you have six projects and
+three different AI tools, and none of them can read it. Trackden makes it a real store,
+with a standard door.
+
+## Requirements
+
+- **Docker** — Trackden runs Postgres (with pgvector) in a container. [Get Docker](https://docs.docker.com/get-docker/)
+- **Python 3.12+**
+- **[uv](https://docs.astral.sh/uv/)** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+No API key is needed. The core makes **zero LLM calls**; only the optional summarizer
+(`trackden eval`, `/graph`) uses one.
+
+## Install
+
+```bash
+git clone https://github.com/dev-nuriengin/session-tracker.git
+cd session-tracker/backend
+uv tool install .          # installs the `trackden` command (~62 MB)
+trackden setup             # starts the database, creates the schema, tells your agents
+```
+
+`trackden setup` is safe to re-run. It starts the Postgres container, creates the schema,
+and adds Trackden to whichever agents it finds — showing you each config file it will
+touch, and backing it up first. Use `trackden setup --check` to see what it would do
+without changing anything.
+
+Then bring your first project in:
+
+```bash
+trackden onboard
+```
+
+### Optional extras
+
+The base install is the CLI and the MCP server — everything you need to track work.
+Two features are heavy enough to be opt-in:
+
+```bash
+uv tool install '.[search]'   # + trackden ask / MCP search (local semantic search)
+uv tool install '.[brain]'    # + trackden eval and the LangGraph summariser
+uv tool install '.[all]'      # everything
+```
+
+`[search]` brings a local embedding model — nothing is sent anywhere, but it is ~130 MB
+of ONNX runtime on its own. Without it, your logs are still saved; they just aren't
+searchable by meaning, and both doors say so rather than reporting "no matches".
+`[brain]` is the only part of Trackden that calls an LLM, and the only part that wants
+an API key.
 
 ## Quickstart
 
@@ -75,7 +122,7 @@ You build the map of your work in the tracker (via CLI/web); it's stored in the 
   rules or architecture themselves is still a human action on the file. The workspace's
   `_tracker.md` is derived output, not a fourth store — the CLI and MCP doors keep it
   current (`trackden sync` repairs it if it drifts). Full spec:
-  `BUILD_NOTES.md`.)*
+  [`docs/internal/BUILD_NOTES.md`](./docs/internal/BUILD_NOTES.md).)*
 - **MCP server** — the primary door; how agents consume the tracker in a standard way.
 - **CLI (`trackden`)** — the main human door: query projects/items, start/resume sessions,
   save steps.
@@ -161,5 +208,5 @@ store/UI + auth — only if you enable them. By default everything stays local &
 ## For AI agents / contributors
 
 Read [`AGENTS.md`](./AGENTS.md) for how to work in this repo, and
-[`_tracker.md`](./_tracker.md) for the current build status (read it at session start,
-tick items at the end).
+[`docs/internal/_tracker.md`](./docs/internal/_tracker.md) for the current build status
+(read it at session start, tick items at the end).

@@ -8,35 +8,44 @@ your machine — **no account, no cloud, no API key needed for the core.**
 
 ## Prerequisites (1 min)
 
-- **Docker** (runs Postgres + the API) — [install](https://docs.docker.com/get-docker/)
+- **Docker** (runs Postgres) — [install](https://docs.docker.com/get-docker/)
+- **Python 3.12+**
 - **[uv](https://docs.astral.sh/uv/)** (Python runner for the CLI + MCP server)
 - *(optional, for the web view)* **Node.js 18+**
 - An AI agent that speaks **MCP** (e.g. Claude Code) — this is where the value comes from
 
-## 1 · Start the core (1 min)
+## 1 · Install (2 min)
 
 ```bash
 git clone https://github.com/dev-nuriengin/session-tracker
-cd session-tracker
-docker compose up --build          # Postgres+pgvector + API on :8000
+cd session-tracker/backend
+uv tool install .          # installs the `trackden` command (~62 MB)
+trackden setup             # database + schema + your agents
 ```
 
-First boot creates the vector extension and the tables. It starts **empty** — Trackden
-invents nothing, so `trackden onboard` (next step) is the only way anything gets in.
-**No `.env` or API key required** — the core makes zero LLM calls.
+Want semantic search (`trackden ask`) or the optional summariser? Install the extras:
+`uv tool install '.[search]'`, `'.[brain]'`, or `'.[all]'`. They're opt-in because the
+local embedding model alone is ~130 MB, and you don't need it to track work.
 
-> ✅ Check it's alive: open http://localhost:8000/projects — you should see JSON.
+`trackden setup` starts the Postgres container, creates the tables, and adds Trackden to
+whichever AI agents it finds on your machine. It shows you every config file it intends
+to write and backs each one up first. Safe to re-run.
+
+Want to see what it would do first? `trackden setup --check` diagnoses and changes nothing.
+
+It starts **empty** — Trackden invents nothing, so `trackden onboard` (next step) is the
+only way anything gets in. **No `.env` or API key required** — the core makes zero LLM calls.
+
+> Prefer not to install globally? `docker compose up -d db` from the repo root, then run
+> the CLI as `uv run trackden …` from `backend/`. Everything below works the same.
 
 ## 2 · Onboard your first project (1 min)
 
 One command brings a project in: it scans the repo you point it at, offers to import
-any checklist it finds, and scaffolds the rest. **Your repo is never modified.** The CLI
-lives in `backend/`, so run it from there (it talks to the DB started in step 1, default
-`localhost:5433` — no config needed):
+any checklist it finds, and scaffolds the rest. **Your repo is never modified.**
 
 ```bash
-cd backend
-uv run trackden onboard                 # interactive wizard
+trackden onboard                 # interactive wizard
 ```
 
 Already have a `_tracker.md`, `CLAUDE.md`, or `AGENTS.md`? It finds them and asks before
@@ -64,22 +73,22 @@ Guidance lands centrally in `~/.trackden/projects/<slug>/` (`_way-of-work.md`, `
 Prefer to build the map by hand? The primitives are still there:
 
 ```bash
-uv run trackden add-project my-first-project
-uv run trackden add-item my-first-project "Set up the repo"
-uv run trackden list
+trackden add-project my-first-project
+trackden add-item my-first-project "Set up the repo"
+trackden list
 ```
 
 That's your structure. An "item" is domain-agnostic — a *ticket*, a *bill*, a *deliverable*;
 it's just a unit of work.
 
-Onboarded the wrong repo, or done with a project? `uv run trackden delete <project>`
+Onboarded the wrong repo, or done with a project? `trackden delete <project>`
 removes it and everything under it (items, folders, memory, sessions, logs) — it previews
 what it's about to remove and asks first (`--yes`/`-y` skips the prompt). Your guidance
 files in `~/.trackden/projects/<slug>/` are kept either way, and it tells you where.
 CLI only — there's no MCP tool for this, so an agent can't do it for you.
 
 The `_tracker.md` mirror rewrites itself after `add-item` and `set-status`, so you rarely
-need to think about it. `uv run trackden sync [project]` repairs one that drifted anyway —
+need to think about it. `trackden sync [project]` repairs one that drifted anyway —
 if a refresh ever failed, or you edited the database by hand.
 
 ## 3 · Connect your agent — the heart (2 min)
@@ -87,21 +96,24 @@ if a refresh ever failed, or you edited the database by hand.
 This is the point of the product: your agent plugs into the tracker over **MCP** and gets
 continuity with **no per-agent setup**.
 
-**Claude Code** — the repo ships a ready `.mcp.json`:
+**`trackden setup` already did this** for every agent it found on your machine, and
+printed the config block for any it didn't. Restart your agent so it picks up the change
+(Claude Code will ask you to approve the `trackden` server the first time).
 
-```json
-{
-  "mcpServers": {
-    "trackden": {
-      "command": "uv",
-      "args": ["--directory", "backend", "run", "python", "-m", "app.mcp_server"]
-    }
-  }
-}
-```
+**Adding it by hand?** `trackden setup --check` prints the block. It goes in:
 
-Open Claude Code in the repo, **approve the `trackden` server** when prompted (or
-restart so it loads). Your agent now has these tools:
+| Agent | File |
+|---|---|
+| Claude Code | `claude mcp add --scope user trackden -- <the command from the block>` |
+| Codex | `~/.codex/config.toml`, as `[mcp_servers.trackden]` |
+| Cursor | `~/.cursor/mcp.json` |
+| Anything else | wherever that tool documents its MCP servers — the block is standard |
+
+The path in the block is **absolute**, so your agent finds Trackden from any project, not
+just this repo. (The `.mcp.json` at this repo's root uses a relative path and is only for
+working *on* Trackden itself.)
+
+Your agent now has these tools:
 
 | Tool | What it does |
 |---|---|
@@ -133,7 +145,7 @@ existing tools rather than adding new ones. `get_playbook` is the one genuinely 
 
 ## 4 · See your status (optional)
 
-- **CLI:** from `backend/` → `uv run trackden show my-first-project` · `uv run trackden ask "what did I do last?"`
+- **CLI:** `trackden show my-first-project` · `trackden ask "what did I do last?"`
 - **Web view:** run `cd frontend && npm run dev` → http://localhost:3000
 
 ## You're done 🎉

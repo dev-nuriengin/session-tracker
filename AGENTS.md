@@ -14,7 +14,8 @@ agent**: it does not do work and does **not** gate or approve anyone's coding. I
 **All its DATA is local and private — never public** (a future optional cloud store is
 opt-in only).
 
-Full design → [`README.md`](./README.md). Current build status → [`_tracker.md`](./_tracker.md)
+Full design → [`README.md`](./README.md). Current build status →
+[`docs/internal/_tracker.md`](./docs/internal/_tracker.md)
 — a **temporary build scaffold** that gets retired once the product tracks itself.
 
 ## The mental model (don't get this wrong)
@@ -30,7 +31,7 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
   **DB** owns *state* (items, status, logs, embeddings); **per-project guidance files**
   (arch/way-of-work/decisions, vendor-neutral names) own *durable human knowledge*;
   **pgvector** is a derived search index over both *by design — today it covers session
-  logs only; guidance files are not indexed yet, so `search` will not find them*. Full spec in `BUILD_NOTES.md` →
+  logs only; guidance files are not indexed yet, so `search` will not find them*. Full spec in [`docs/internal/BUILD_NOTES.md`](./docs/internal/BUILD_NOTES.md) →
   "LOCKED DESIGN — Storage model". *(`trackden onboard` scaffolds the files layer to
   `~/.trackden`; guidance is readable over MCP via `get_guidance`, and decisions are
   recorded with `add_decision` — but `update_guidance` does not exist yet: editing the
@@ -55,10 +56,10 @@ Full design → [`README.md`](./README.md). Current build status → [`_tracker.
 
 ## How to work in THIS repo (our build workflow — not product features)
 
-1. **At session start:** read `_tracker.md` (temporary). The first `[ ]` item is NEXT.
+1. **At session start:** read `docs/internal/_tracker.md` (temporary). The first `[ ]` item is NEXT.
 2. **Plan before code** — propose the plan, get approval before editing. *(This is how we
    build the repo. It is NOT a tracker feature — the tracker is memory, not a code-gate.)*
-3. **At session end:** tick `_tracker.md` and update the "Resume here" block.
+3. **At session end:** tick `docs/internal/_tracker.md` and update the "Resume here" block.
 4. **Git:** never commit/push without an explicit "yes" (account `dev-nuriengin`). Never
    commit tracker DATA — only app code.
 

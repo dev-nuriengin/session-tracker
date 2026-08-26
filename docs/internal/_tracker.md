@@ -18,6 +18,7 @@ plug into it over MCP so they know where everything stands without you re-explai
 
 | | |
 |---|---|
+| `trackden setup` | Make a fresh machine ready: start the Postgres container (`docker run`, not compose — the tool is installed globally and there is no compose file outside this repo, so it reuses compose's own container name to stay compatible), create the schema, and register the MCP server with every agent it finds. Shows each config file before writing, backs it up, merges rather than overwrites, and refuses a file it cannot parse. `--check` diagnoses without touching anything. Exempt from the app-level `init_db()` callback — it is the command that creates the database. |
 | `trackden onboard` | Bring a project in. Reads a repo, offers to import its checklist behind a y/n/edit gate, scaffolds guidance in `~/.trackden`. Never writes to your repo. |
 | `trackden list` · `show <p>` · `status <p>` | See what you have and what's next. |
 | `trackden add-item <p> "…" [--status]` · `add-folder <p> "…" [--parent]` · `log [--item]` · `remember [--kind --path --item --folder]` | Add work (items, folders), save progress, store a link/note/transcript/file. `--item` on `log`/`remember` scopes an entry to one item instead of the whole project; `remember --kind file --path <file>` points at a local artifact (Trackden never touches it). `add-item` / `add-folder` / `add-status` are now available to an agent over MCP too. |
@@ -202,15 +203,79 @@ An `@pytest.mark.db` end-to-end suite proves the wiring against the real databas
 filesystem — the claim unit tests with fakes can't make — including that two `sync` runs
 with no DB change between them write identical bytes.
 
+**✅ DONE — `trackden setup` (shipped 2026-08-26).** One command that takes a bare machine
+to a working Trackden: `backend/app/setup.py` starts the Postgres container, creates the
+schema, and registers the MCP server with every agent it finds. Same shape as `sync.py` and
+`guidance.py` — every function returns an outcome dict and never raises — plus one more
+constraint of its own: every external process (`docker`, an agent's CLI) goes through an
+injected `run`, so the suite needs neither Docker nor an agent installed to test it.
+
+**`docker run`, not `docker compose up -d db`.** Once `trackden` is installed as a tool it
+runs from any directory, and there is no compose file outside this repo to reach for.
+`ensure_database` creates the container under the same `container_name` `docker-compose.yml`
+uses, so the two paths can't produce two competing databases. A stopped container is
+**started**, never re-created — re-creating would orphan the volume holding the user's
+projects behind a fresh, empty one.
+
+**Exempt from the app-level `init_db()` callback in `cli.py`.** That callback runs before
+every command; `setup` is the command that *creates* the database, so running the callback
+first would traceback out of the one command able to fix a fresh machine. `_ensure_schema`
+checks `ctx.invoked_subcommand == "setup"` and returns before calling `init_db()`.
+
+**MCP registration is agent-agnostic and data-driven** — a 3-entry `AGENTS` list in
+`setup.py`: Claude Code via its own CLI (`claude mcp add --scope user`), Codex via
+`~/.codex/config.toml`, Cursor via `~/.cursor/mcp.json`, and `render_snippet()`'s copy-paste
+block for anything else. Writing into a file that belongs to the user is guarded end to end:
+merge rather than overwrite (`register_json_config` / `register_toml_config` keep every other
+server the file already lists), back up first (`_backup`, a `.trackden-bak` copy made before
+any write), preview and confirm at the CLI (`trackden setup` names every file it intends to
+touch before touching it; `--yes` skips the prompt), refuse a file it cannot parse
+(`"unparseable"` — bytes left byte-for-byte untouched), and update rather than duplicate on a
+re-run (the entry is an assignment into `mcpServers`, not an append).
+
+**The MCP command it writes is absolute.** `mcp_command()` resolves `backend/`'s real path
+from where `setup.py` itself is installed. The repo's own `.mcp.json` uses a relative
+`backend` directory, which only resolves when the agent happens to be started inside this
+repo — the reason Trackden was invisible from every other project until now.
+
+**Presence checks go through the same injected `run`, never `shutil.which`** —
+`check_docker` and the CLI branch of `detect_agents` both read an exit code back from
+`run(...)`, so "docker is missing" or "codex isn't installed" is a fact the tests can assert
+regardless of what happens to be on the machine running them.
+
+`trackden setup [--check] [--yes/-y]` — CLI command count 19 → 20. `--check` diagnoses and
+changes nothing: no container touched, no config written. No MCP tool — registering an
+agent's own config is a local-machine action a human runs once, not something an agent calls
+over MCP; MCP tool count stays 17.
+
 **▸ NEXT — the `SessionStart` launcher**, still the only mechanical guarantee any of this
 gets read. See "This closes out Stage B" below.
 
-### Session state, 2026-08-25 — read before assuming anything shipped
+### Session state, 2026-08-26 — read before assuming anything shipped
 
-Suite **428 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **19
-commands** · MCP **17 tools** (`uv run trackden --help`; tool count is the `@mcp.tool()`
-occurrences in `mcp_server.py`) · `~/.trackden` does not exist · `session_tracker_db` healthy on
-:5433. Verified this session, not taken on trust.
+Suite **466 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **20
+commands** · MCP **17 tools** (counts are the `^@app.command` and `@mcp.tool()` occurrences in
+`cli.py` / `mcp_server.py`) · `session_tracker_db` healthy on :5433. Verified this session, not
+taken on trust.
+
+**`trackden` is now an installed command**, not just `uv run trackden` from `backend/`:
+`uv tool install .` puts it on PATH (~250 MB — fastembed's ONNX runtime plus the optional
+langchain/langgraph/anthropic stack; making those extras is worth doing).
+
+**This file moved** to `docs/internal/_tracker.md` (with `BUILD_NOTES.md`) so the repo root
+shows a stranger a product, not a build log. Links updated in README, QUICKSTART, AGENTS.md
+and CLAUDE.md.
+
+**The install is 62 MB, not 250 MB.** Heavy dependencies moved to optional extras:
+`[search]` (fastembed — ~130 MB of ONNX runtime on its own, for `ask` / MCP `search`),
+`[brain]` (anthropic + langchain/langgraph/langfuse, the only part that calls an LLM),
+`[web]` (fastapi + uvicorn). `[all]` takes everything, and the dev group installs all
+three so the suite never silently skips an optional feature. Saving work never depends
+on an extra: without `[search]`, `embed()` returns None, `add_session_log` stores a NULL
+embedding (the column was already nullable and `search_logs` already filtered NULLs),
+and both doors say the feature is missing instead of returning an empty result — an
+agent handed `[]` would tell the user their history is empty, which is a lie they
+cannot catch.
 
 **`main` now matches `origin/main`** (both at `1df8332`) — the 8 commits this section used to
 flag as unpushed went out after 2026-08-05. This branch, `feat/trackden-sync`, is **11 commits
@@ -324,11 +389,13 @@ so a caller who supplies an item but not its folder gets no folder scoping for f
 
 ---
 
-**Status:** 76 / 83 — all phases 0–13 have shipped their Stage A, Stage B1, Stage B2 and
+**Status:** 82 / 89 — all phases 0–13 have shipped their Stage A, Stage B1, Stage B2 and
 Stage B3 core. (Was 67 / 74 until 2026-08-05, when Phase 14 `trackden sync` added its 9 boxes;
-nothing was completed or removed, so the done count was unchanged by design. Now 76 / 83 as of
-2026-08-25 — those same 9 boxes shipped and are ticked, moving the done count 67 → 76 while the
-total stayed 83.) **But "phases done" ≠ "usable day to day":** of the 7 open items, **none are
+nothing was completed or removed, so the done count was unchanged by design. Then 76 / 83 as of
+2026-08-25 — those same 9 boxes shipped and were ticked, moving the done count 67 → 76 while the
+total stayed 83. Now 82 / 89 as of 2026-08-26 — Phase 15 `trackden setup` added 6 boxes and
+shipped all 6 in the same step, no separate approved-then-built gap this time, so both totals
+moved together.) **But "phases done" ≠ "usable day to day":** of the 7 open items, **none are
 life-support blockers** — the one gap that used to stop daily use (`set_status`) shipped in
 Stage A, an agent can now create work itself, unprompted (Stage B1, 2026-08-03), a finding
 now attaches to the item it belongs to instead of just the whole project (Stage B2,
@@ -342,6 +409,12 @@ Do not read this line as "finished".
   `set-status` refresh it automatically at both doors, and `trackden sync [project]` repairs
   one that drifted. See "▸ NEXT" above and Phase 14 below for what shipped and the decisions
   behind it.
+- ✅ **Phase 15 `trackden setup` — shipped 2026-08-26.** A fresh machine used to need four
+  manual steps from the README, and the fourth silently didn't work outside this repo. Now
+  one command starts the database (`docker run`, never `docker compose` — there's no compose
+  file once `trackden` is installed as a tool), creates the schema, and registers Trackden
+  with every MCP-capable agent it finds, guarding every config file it touches. See the
+  "✅ DONE" block above and Phase 15 below for what shipped and the decisions behind it.
 - 🟡 **Phase 11 launcher/alias / `SessionStart` hook — the one real gap left *in the
   behaviour-layer spec*.** Everything shipped through Stage B3 steers an agent toward the
   rules (docstrings, the `overview` digest, a version number); none of it *guarantees* an
@@ -542,3 +615,15 @@ shipped.
 - [x] Tests: one per outcome with a tmp `home`. `hand_edited` must assert the file's **bytes are unchanged**, and `unknown_project` must assert **no file was created** — a test that only checks the returned status passes against an implementation that returns the right string and clobbers the file anyway. Plus `synced` with zero items (an empty mirror is success), one `@pytest.mark.db` end-to-end proving auto-refresh is really wired to a door, and an assertion that `log` leaves the mirror untouched (proved with fakes, `test_log_does_not_refresh` in `test_cli_sync.py` — a call-count spy, not a byte comparison; not the `@pytest.mark.db` end-to-end, because `add_session_log` calls `embed()`, which downloads an ONNX model on first use)
 - [x] Idempotence: two `sync` runs with no DB change between them produce identical bytes, or the `~/.trackden` git repo that `ensure_home_git` maintains fills with spurious diffs
 - [x] No MCP `sync` tool, deliberately — an agent reads state via `overview`/`list_items`, which query the DB and are never stale; the mirror is a human-facing artifact
+
+## Phase 15 — `trackden setup`: one command from nothing to a working Trackden ✅ (shipped 2026-08-26)
+
+No separate spec or plan doc this time — unlike Phase 11–14, this one was built directly.
+Every box below is shipped.
+
+- [x] `setup.py` — `check_docker` / `ensure_database` / `wait_for_database` / `ensure_schema`, each an outcome dict, never raising, matching the shape `sync.py` and `guidance.py` established; `ensure_database` starts a stopped container rather than re-creating it, and a fresh one is created under `docker-compose.yml`'s own `container_name` so the two paths can't produce two competing databases
+- [x] `mcp_command()` — the absolute `uv --directory <backend> run python -m app.mcp_server` stdio command, resolved from `setup.py`'s own installed location; fixes the relative-path bug in the repo's own `.mcp.json` that made Trackden invisible to an agent started outside this repo
+- [x] `AGENTS` (data-driven, 3 entries) + `detect_agents` + `register_agent` — Claude Code via its own CLI (`claude mcp add --scope user`), Codex via TOML, Cursor via JSON; `register_json_config` / `register_toml_config` merge and back up (`.trackden-bak`) rather than overwrite, refuse a file they cannot parse, and update rather than duplicate on a re-run
+- [x] `trackden setup [--check] [--yes/-y]` (`cli.py`) — names every config file it will touch and asks before writing (`--yes` skips the prompt); exempt from the `_ensure_schema` app callback, since it is the command that creates the database in the first place; prints `render_snippet()`'s copy-paste block for any agent it didn't register with. CLI command count 19 → 20; no MCP tool, MCP tool count stays 17
+- [x] Presence checks (`docker`, an agent's CLI) go through an injected `run`, not `shutil.which`, so the suite is independent of what's actually installed on the machine running it
+- [x] Tests: `backend/tests/test_setup.py` (pure — fakes `run`, writes under `tmp_path`; the merge/backup/refuse-unparseable/update-not-duplicate logic runs against real files on disk, deliberately not faked) and `backend/tests/test_cli_setup.py` (the CLI door — the confirmation gate, `--check`, `--yes`, exit codes, and the `init_db()` exemption)
