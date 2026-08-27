@@ -264,3 +264,22 @@ def test_onboard_prints_a_paste_ready_snippet_without_writing_to_the_repo(
 
     assert _snapshot(repo) == before_files, "onboard must not write to the scanned repo"
     assert _dirs(repo) == before_dirs, "onboard must not create directories in the scanned repo"
+
+
+def test_onboard_with_a_slug_scans_a_non_git_project_folder(
+    home, fake_db, fake_repo_with_items, monkeypatch
+):
+    """A project folder need not be a git repo — nothing in the scan requires `.git`,
+    which appears only in the ignore set.
+
+    `onboard <slug>` with no `--repo` fell back to the cwd ONLY when `.git` existed,
+    so in a non-git folder it scanned nothing and said nothing — while the wizard, in
+    that same folder, scanned it happily. Same tool, same folder, two outcomes.
+    """
+    monkeypatch.chdir(fake_repo_with_items)
+    assert not (fake_repo_with_items / ".git").exists(), "fixture must not be a git repo"
+
+    result = runner.invoke(app, ["onboard", "my-proj", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert state_has(fake_db, "open thing")

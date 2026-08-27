@@ -273,7 +273,7 @@ feature, or if steering is observed failing often enough in real use to be worth
 Claude-only guarantee.
 
 **▸ NEXT — use it.** The product is built and nothing is queued to build. The database is
-empty: every one of the 466 tests is a test, not a user.
+empty: every one of the 469 tests is a test, not a user.
 
 **Owner's machine, verified 2026-08-26 — what is and is not set up:**
 
@@ -323,9 +323,30 @@ the first time something behaves oddly.
 Trackden, which was the original stated goal. `update_guidance` (agents can read guidance but
 not write it) is the other large gap.
 
+### Fixed 2026-08-27 — the first bug found by using it, not by planning
+
+Found while onboarding for real. The prompt said "Repo path to scan", but nothing in the scan
+requires git — `.git` appears only in onboard's ignore set. The wording was the visible half;
+the same wrong assumption was also in the code, in one branch only:
+
+- `onboard` (wizard) defaulted the folder to the cwd, git or not.
+- `onboard <slug>` with no `--repo` used the cwd **only if `.git` existed** — otherwise it
+  scanned nothing and never said why, creating an empty project as if the folder held nothing.
+  Same folder, same tool, two outcomes. A non-git project folder (GrowthHQ is one) hit this.
+
+Fixed: the cwd is the default either way, the wording is now "Project folder to scan — one
+project", and the docstring states that a git repo is not required. `--version` did not exist
+at all and now does — eager, so it answers *before* the schema callback reaches for a database,
+for the same reason `setup` is exempt from it. Three tests, each watched failing first.
+
+**Gotcha worth keeping: `uv tool install --force .` reinstalled the OLD code.** uv served a
+cached build for the unchanged version `0.1.0` and still printed "Installed 1 executable", so
+the hand-check appeared to prove the fix had not worked. `--reinstall --no-cache` was needed.
+Bumping the version on each change would make this self-correcting; not done.
+
 ### Session state, 2026-08-26 — read before assuming anything shipped
 
-Suite **466 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **20
+Suite **469 passed, 0 skipped, 0 warnings** (`cd backend && uv run pytest -q`) · CLI **20
 commands** · MCP **17 tools** (counts are the `^@app.command` and `@mcp.tool()` occurrences in
 `cli.py` / `mcp_server.py`) · `session_tracker_db` healthy on :5433. Verified this session, not
 taken on trust.

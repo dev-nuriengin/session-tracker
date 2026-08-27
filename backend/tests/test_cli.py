@@ -4,6 +4,7 @@ No Postgres needed here: init_db and the repository call are both faked, so
 these tests never touch a database, real or test.
 """
 
+from importlib.metadata import version as metadata_version
 from unittest.mock import Mock
 
 from typer.testing import CliRunner
@@ -528,3 +529,22 @@ def test_delete_echoes_the_actual_removed_counts(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "✓ deleted 'acme'" in result.output
     assert "items      3" in result.output
+
+
+def test_version_flag_prints_the_installed_version():
+    """`trackden --version` is what a user reaches for first to check what they have;
+    it did not exist, so the tool could not report its own version at all."""
+    result = runner.invoke(cli_mod.app, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert metadata_version("trackden-backend") in result.output
+
+
+def test_version_flag_does_not_touch_the_database(monkeypatch):
+    """The version must be readable on a machine with no database — same reason
+    `setup` is exempt from the schema callback. Proven by making init_db fatal."""
+    def boom():
+        raise AssertionError("init_db must not run for --version")
+
+    monkeypatch.setattr(cli_mod, "init_db", boom)
+    result = runner.invoke(cli_mod.app, ["--version"])
+    assert result.exit_code == 0, result.output

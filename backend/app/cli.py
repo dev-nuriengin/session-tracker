@@ -6,6 +6,8 @@ doors. Data is read from / written to the local Postgres, never a hardcoded list
 Run:  `uv run trackden <command>`   (or `uv run python -m app.cli <command>`)
 """
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _metadata_version
 from pathlib import Path
 
 import typer
@@ -25,9 +27,35 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+try:
+    __version__ = _metadata_version("trackden-backend")
+except PackageNotFoundError:  # a source tree with nothing installed
+    __version__ = "unknown"
+
+
+def _version_callback(value: bool) -> None:
+    """Eager, so it answers before the schema callback below reaches for a database.
+
+    Same reason `setup` is exempt from that callback: a version has to be readable on
+    a machine that has no Postgres yet, which is exactly the machine whose owner is
+    asking what they installed.
+    """
+    if value:
+        typer.echo(f"trackden {__version__}")
+        raise typer.Exit()
+
 
 @app.callback()
-def _ensure_schema(ctx: typer.Context) -> None:
+def _ensure_schema(
+    ctx: typer.Context,
+    _version: bool = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the installed version and exit.",
+    ),
+) -> None:
     """Run before every command: make sure the schema exists.
 
     Except `setup`, which is the command whose whole job is to bring a machine from
@@ -475,14 +503,17 @@ def onboard(
     name: str = typer.Option(None, help="Display name"),
     kind: str = typer.Option("personal", help="personal | client"),
     client: str = typer.Option(None, help="Client name (for client projects)"),
-    repo: str = typer.Option(None, help="Repo path to scan (default: the current directory)"),
+    repo: str = typer.Option(
+        None, help="Project folder to scan — one project (default: the current directory)"
+    ),
     no_import: bool = typer.Option(False, "--no-import", help="Skip auto-detect entirely"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Import everything found, no prompts"),
 ):
     """Bring a project into Trackden: import what exists, scaffold the rest.
 
-    Reads the repo (never writes to it), asks before importing anything, then creates
-    the project in the DB and its guidance folder under ~/.trackden.
+    Reads the project folder (never writes to it), asks before importing anything, then
+    creates the project in the DB and its guidance folder under ~/.trackden. A git repo
+    is not required — one folder, one project.
     """
     wizard = slug is None
     if wizard:
@@ -491,11 +522,13 @@ def onboard(
         kind = typer.prompt("Kind (personal | client)", default=kind)
         if kind == "client" and not client:
             client = typer.prompt("Client name", default="") or None
-        repo = repo or typer.prompt("Repo path to scan", default=str(Path.cwd()))
+        repo = repo or typer.prompt("Project folder to scan", default=str(Path.cwd()))
 
     if repo is None and not no_import:
-        cwd = Path.cwd()
-        repo = str(cwd) if (cwd / ".git").exists() else None
+        # The cwd, git or not. Nothing in the scan requires `.git` — it appears only in
+        # onboard's ignore set. Requiring it here meant `onboard <slug>` silently scanned
+        # nothing in a non-git project folder, while the wizard scanned that same folder.
+        repo = str(Path.cwd())
 
     try:
         result = onboard_mod.run_onboard(
